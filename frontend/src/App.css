@@ -1,0 +1,322 @@
+/* Dark Emerald Styling for Emerald Mini Depot */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #121814;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #e0e0e0;
+}
+
+/* LOGIN SCREEN */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #121814;
+}
+
+.login-card {
+  background: #1e2621;
+  padding: 40px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.6);
+  border-top: 6px solid #2e7d32;
+}
+
+.login-card h2 {
+  color: #81c784;
+  margin-top: 0;
+  margin-bottom: 5px;
+  text-align: center;
+}
+
+.login-card p {
+  text-align: center;
+  font-size: 14px;
+  color: #b0bec5;
+  margin-bottom: 25px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #e0e0e0;
+  font-size: 14px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px;
+  background-color: #2b3630;
+  border: 1px solid #37474f;
+  color: #ffffff;
+  border-radius: 6px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.form-group input:focus {
+  border-color: #81c784;
+}
+
+.btn-login {
+  width: 100%;
+  padding: 12px;
+  background-color: #2e7d32;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.btn-login:hover {
+  background-color: #388e3c;
+}
+
+.error-message {
+  background-color: rgba(211, 47, 47, 0.2);
+  color: #ef5350;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #ef5350;
+  margin-bottom: 20px;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* DASHBOARD INVENTORY CONTAINER */
+.inventory-container {
+  max-width: 1000px;
+  margin: 40px auto;
+  background: #1e2621;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  border-top: 6px solid #2e7d32;
+}
+
+h1 {
+  color: #81c784;
+  margin-bottom: 5px;
+}
+
+p {
+  color: #b0bec5;
+  margin-top: 0;
+  margin-bottom: 25px;
+}
+
+.search-input {
+  width: 100%;
+  max-width: 400px;
+  padding: 12px 15px;
+  font-size: 15px;
+  background-color: #2b3630;
+  border: 2px solid #37474f;
+  color: #ffffff;
+  border-radius: 6px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.search-input:focus {
+  border-color: #81c784;
+}
+
+.form-card {
+  background: #25312a;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+  border: 1px solid #37474f;
+}
+
+.form-card h3 {
+  margin-top: 0;
+  color: #81c784;
+}
+
+.form-inputs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.form-inputs input {
+  padding: 10px;
+  background-color: #1e2621;
+  border: 1px solid #37474f;
+  color: #ffffff;
+  border-radius: 4px;
+  flex: 1;
+  min-width: 140px;
+  outline: none;
+}
+
+.form-inputs input:focus {
+  border-color: #81c784;
+}
+
+/* BUTTONS */
+.btn-add {
+  padding: 10px 20px;
+  background-color: #2e7d32;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-add:hover {
+  background-color: #388e3c;
+}
+
+.btn-logout {
+  padding: 8px 16px;
+  background-color: #c62828;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btn-logout:hover {
+  background-color: #b71c1c;
+}
+
+.btn-edit {
+  padding: 6px 12px;
+  background-color: #0277bd;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 6px;
+}
+
+.btn-edit:hover {
+  background-color: #0288d1;
+}
+
+.btn-delete {
+  padding: 6px 12px;
+  background-color: #c62828;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-delete:hover {
+  background-color: #d32f2f;
+}
+
+/* ACTION BUTTONS WRAPPER */
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px; /* Adds space so the buttons never touch */
+}
+
+.btn-save {
+  padding: 6px 14px;
+  background-color: #2e7d32;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-save:hover {
+  background-color: #388e3c;
+}
+
+.btn-cancel {
+  padding: 6px 14px;
+  background-color: #616161;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-cancel:hover {
+  background-color: #757575;
+}
+
+/* TABLE STYLING */
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+  background: #1e2621;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.inventory-table th {
+  background-color: #2e7d32;
+  color: white;
+  padding: 12px 15px;
+  text-align: left;
+}
+
+.inventory-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #2b3630;
+  color: #e0e0e0;
+}
+
+.inventory-table tr:hover {
+  background-color: #25312a;
+}
+
+.table-edit-input {
+  padding: 6px;
+  background: #2b3630;
+  border: 1px solid #81c784;
+  color: white;
+  border-radius: 4px;
+  width: 90%;
+}
+
+.toggle-link-btn {
+  background: none;
+  border: none;
+  color: #81c784;
+  cursor: pointer;
+  font-size: 13px;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.toggle-link-btn:hover {
+  color: #a5d6a7;
+}
+
+.success-message {
+  background-color: rgba(46, 125, 50, 0.2);
+  color: #81c784;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #2e7d32;
+  margin-bottom: 20px;
+  font-size: 14px;
+  text-align: center;
+}
