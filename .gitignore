@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+frontend/node_modules/
+
+# local environment files
+.env
+
+# build outputs
+build/
+dist/
+
+# mac os files
+.DS_Store
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
