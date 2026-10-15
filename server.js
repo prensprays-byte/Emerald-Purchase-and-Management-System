@@ -43,7 +43,7 @@ app.get('/api/inventory', (req, res) => {
   });
 });
 
-// 2. Search for an appliance by name or keyword (Search Bar feature)
+// 2. Search for an appliance by name or keyword
 app.get('/api/inventory/search', (req, res) => {
   const searchTerm = req.query.q || '';
   const query = 'SELECT * FROM appliances WHERE name LIKE ? OR category LIKE ?';
@@ -56,40 +56,36 @@ app.get('/api/inventory/search', (req, res) => {
   });
 });
 
-// 3. Add a new appliance record (Create)
+// Add Item (Supports image_url)
 app.post('/api/inventory', (req, res) => {
-    const { name, category, quantity, price } = req.body;
-    const query = 'INSERT INTO appliances (name, category, quantity, price) VALUES (?, ?, ?, ?)';
-    
-    db.query(query, [name, category, quantity, price], (err, result) => {
-      if (err) {
-        console.error('Error adding appliance to database:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      res.status(201).json({ message: 'Appliance added successfully', id: result.insertId });
-    });
+  const { name, category, image_url, quantity, price } = req.body;
+  const query = 'INSERT INTO appliances (name, category, image_url, quantity, price) VALUES (?, ?, ?, ?, ?)';
+  db.query(query, [name, category, image_url || '', quantity, price], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Item added successfully', id: result.insertId });
   });
+});
 
-  // Login Route
+// Login Route
 app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    const query = 'SELECT * FROM users WHERE username = ? AND password = ?';
-  
-    db.query(query, [username, password], (err, results) => {
-      if (err) {
-        console.error('Error logging in:', err);
-        return res.status(500).json({ error: 'Database server error' });
-      }
-  
-      if (results.length > 0) {
-        res.json({ message: 'Login successful', user: results[0] });
-      } else {
-        res.status(401).json({ error: 'Invalid username or password' });
-      }
-    });
-  });
+  const { username, password } = req.body;
+  const query = 'SELECT * FROM users WHERE username = ? AND password = ?';
 
-  // Register Route
+  db.query(query, [username, password], (err, results) => {
+    if (err) {
+      console.error('Error logging in:', err);
+      return res.status(500).json({ error: 'Database server error' });
+    }
+
+    if (results.length > 0) {
+      res.json({ message: 'Login successful', user: results[0] });
+    } else {
+      res.status(401).json({ error: 'Invalid username or password' });
+    }
+  });
+});
+
+// Register Route
 app.post('/api/register', (req, res) => {
   const { username, password } = req.body;
   const query = 'INSERT INTO users (username, password, role) VALUES (?, ?, ?)';
@@ -106,22 +102,18 @@ app.post('/api/register', (req, res) => {
   });
 });
 
-// 4. Update an appliance record (Update/Edit)
+// Update Item / Stock / Purchase
 app.put('/api/inventory/:id', (req, res) => {
   const { id } = req.params;
-  const { name, category, quantity, price } = req.body;
-  const query = 'UPDATE appliances SET name = ?, category = ?, quantity = ?, price = ? WHERE id = ?';
-
-  db.query(query, [name, category, quantity, price, id], (err, result) => {
-    if (err) {
-      console.error('Error updating appliance:', err);
-      return res.status(500).json({ error: 'Database server error' });
-    }
-    res.json({ message: 'Appliance updated successfully' });
+  const { name, category, image_url, quantity, price } = req.body;
+  const query = 'UPDATE appliances SET name=?, category=?, image_url=?, quantity=?, price=? WHERE id=?';
+  db.query(query, [name, category, image_url, quantity, price, id], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Item updated successfully' });
   });
 });
 
-// 5. Delete an appliance record (Delete)
+// Delete an appliance record
 app.delete('/api/inventory/:id', (req, res) => {
   const { id } = req.params;
   const query = 'DELETE FROM appliances WHERE id = ?';

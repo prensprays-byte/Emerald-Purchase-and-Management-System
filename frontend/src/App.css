@@ -1,4 +1,4 @@
-/* Dark Emerald Styling for Emerald Mini Depot */
+/* Dark Emerald Styling for Emerald Purchase & Management System */
 body {
   margin: 0;
   padding: 0;
@@ -94,9 +94,9 @@ body {
   text-align: center;
 }
 
-/* DASHBOARD INVENTORY CONTAINER */
+/* DASHBOARD CONTAINER */
 .inventory-container {
-  max-width: 1000px;
+  max-width: 1100px;
   margin: 40px auto;
   background: #1e2621;
   padding: 30px;
@@ -167,7 +167,132 @@ p {
   border-color: #81c784;
 }
 
+/* PRODUCT CARD GRID LAYOUT (Strictly 5 items per row) */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.product-card {
+  background-color: #25312a;
+  border: 1px solid #2e7d32;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.product-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 8px 18px rgba(46, 125, 50, 0.4);
+}
+
+.product-image {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  background-color: #141c17;
+}
+
+.product-name {
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: #ffffff;
+  margin: 3px 0;
+}
+
+.product-category {
+  font-size: 0.75rem;
+  color: #81c784;
+}
+
+.product-price {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #4caf50;
+  margin: 4px 0;
+}
+
+.product-stock {
+  font-size: 0.75rem;
+  color: #b0bec5;
+}
+
+/* MODAL ZOOM POPUP WINDOW */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: #19231c;
+  border: 2px solid #2e7d32;
+  border-radius: 12px;
+  padding: 25px;
+  width: 90%;
+  max-width: 420px;
+  color: white;
+  text-align: center;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8);
+  animation: zoomIn 0.2s ease-out;
+}
+
+@keyframes zoomIn {
+  from { transform: scale(0.85); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.modal-image {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.modal-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 15px 0;
+  text-align: left;
+}
+
+.modal-inputs label {
+  font-size: 0.8rem;
+  color: #81c784;
+}
+
+.modal-inputs input {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #2e7d32;
+  background: #121814;
+  color: white;
+}
+
 /* BUTTONS */
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 15px;
+}
+
 .btn-add {
   padding: 10px 20px;
   background-color: #2e7d32;
@@ -196,22 +321,22 @@ p {
   background-color: #b71c1c;
 }
 
-.btn-edit {
-  padding: 6px 12px;
-  background-color: #0277bd;
+.btn-save {
+  padding: 6px 14px;
+  background-color: #2e7d32;
   color: white;
   border: none;
   border-radius: 4px;
+  font-weight: bold;
   cursor: pointer;
-  margin-right: 6px;
 }
 
-.btn-edit:hover {
-  background-color: #0288d1;
+.btn-save:hover {
+  background-color: #388e3c;
 }
 
 .btn-delete {
-  padding: 6px 12px;
+  padding: 6px 14px;
   background-color: #c62828;
   color: white;
   border: none;
@@ -223,29 +348,6 @@ p {
   background-color: #d32f2f;
 }
 
-/* ACTION BUTTONS WRAPPER */
-.action-buttons {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 8px; /* Adds space so the buttons never touch */
-}
-
-.btn-save {
-  padding: 6px 14px;
-  background-color: #2e7d32;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.btn-save:hover {
-  background-color: #388e3c;
-}
-
 .btn-cancel {
   padding: 6px 14px;
   background-color: #616161;
@@ -253,47 +355,10 @@ p {
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.2s;
 }
 
 .btn-cancel:hover {
   background-color: #757575;
-}
-
-/* TABLE STYLING */
-.inventory-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 15px;
-  background: #1e2621;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.inventory-table th {
-  background-color: #2e7d32;
-  color: white;
-  padding: 12px 15px;
-  text-align: left;
-}
-
-.inventory-table td {
-  padding: 12px 15px;
-  border-bottom: 1px solid #2b3630;
-  color: #e0e0e0;
-}
-
-.inventory-table tr:hover {
-  background-color: #25312a;
-}
-
-.table-edit-input {
-  padding: 6px;
-  background: #2b3630;
-  border: 1px solid #81c784;
-  color: white;
-  border-radius: 4px;
-  width: 90%;
 }
 
 .toggle-link-btn {
@@ -306,10 +371,6 @@ p {
   padding: 0;
 }
 
-.toggle-link-btn:hover {
-  color: #a5d6a7;
-}
-
 .success-message {
   background-color: rgba(46, 125, 50, 0.2);
   color: #81c784;
@@ -319,4 +380,42 @@ p {
   margin-bottom: 20px;
   font-size: 14px;
   text-align: center;
+}
+
+/* PAGINATION CONTROLS (Centered with hover effects) */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 35px;
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.page-btn {
+  background-color: #25312a;
+  color: #81c784;
+  border: 1px solid #2e7d32;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: all 0.25s ease;
+}
+
+/* Hover effect: lifts up, changes background, and glows slightly */
+.page-btn:hover {
+  background-color: #2e7d32;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.4);
+}
+
+.page-btn.active {
+  background-color: #2e7d32;
+  color: white;
+  border-color: #81c784;
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.4);
 }
