@@ -8,6 +8,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ROOT ROUTE (Fixes the "Cannot GET /" screen)
+app.get('/', (req, res) => {
+  res.send('Emerald System API is running successfully!');
+});
+
 const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
