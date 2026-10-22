@@ -8,7 +8,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ROOT ROUTE (Fixes the "Cannot GET /" screen)
 app.get('/', (req, res) => {
   res.send('Emerald System API is running successfully!');
 });
@@ -17,7 +16,9 @@ const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT || 3306,
+  ssl: false
 });
 
 db.getConnection((err, connection) => {
@@ -27,75 +28,34 @@ db.getConnection((err, connection) => {
   }
   console.log('Successfully connected to MySQL database');
 
-  const createAppliancesTable = `
-    CREATE TABLE IF NOT EXISTS appliances (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      name VARCHAR(255),
-      category VARCHAR(100),
-      sub_category VARCHAR(255),
-      item_code VARCHAR(100),
-      brand VARCHAR(100),
-      size VARCHAR(100),
-      design VARCHAR(255),
-      surface VARCHAR(100),
-      texture VARCHAR(100),
-      class VARCHAR(50),
-      special_specs VARCHAR(255),
-      image_url TEXT,
-      quantity INT,
-      price DECIMAL(10, 2)
-    );
-  `;
 
-  const createOrdersTable = `
-    CREATE TABLE IF NOT EXISTS orders (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      appliance_id INT,
-      appliance_name VARCHAR(255),
-      quantity INT,
-      total_price DECIMAL(10, 2),
-      status VARCHAR(50) DEFAULT 'Pending',
-      created_by VARCHAR(100),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `;
 
-  // Incident Reports Table
-  const createIncidentTable = `
-    CREATE TABLE IF NOT EXISTS incident_reports (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      title VARCHAR(255),
-      description TEXT,
-      reported_by VARCHAR(100),
-      status VARCHAR(50) DEFAULT 'Open',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `;
-
-  connection.query(createAppliancesTable, (err) => {
-    if (err) console.error('Error creating appliances table:', err);
-    connection.query(createOrdersTable, (orderErr) => {
-      if (orderErr) console.error('Error creating orders table:', orderErr);
-      connection.query(createIncidentTable, (incErr) => {
-        if (incErr) console.error('Error creating incident table:', incErr);
-        connection.release();
+  connection.query(createUsersTable, (userErr) => {
+    if (userErr) console.error('Error creating users table:', userErr);
+    connection.query(createAppliancesTable, (err) => {
+      if (err) console.error('Error creating appliances table:', err);
+      connection.query(createOrdersTable, (orderErr) => {
+        if (orderErr) console.error('Error creating orders table:', orderErr);
+        connection.query(createPurchasesTable, (purchErr) => {
+          if (purchErr) console.error('Error creating purchases table:', purchErr);
+          connection.query(createIncidentTable, (incErr) => {
+            if (incErr) console.error('Error creating incident table:', incErr);
+            connection.release();
+          });
+        });
       });
     });
   });
 });
 
 app.get('/api/inventory', (req, res) => {
-  const { category, sub_category } = req.query;
+  const { category } = req.query;
   let query = 'SELECT * FROM appliances WHERE 1=1';
   let params = [];
 
   if (category && category !== 'All') {
     query += ' AND category = ?';
     params.push(category);
-  }
-  if (sub_category && sub_category !== 'All') {
-    query += ' AND sub_category = ?';
-    params.push(sub_category);
   }
 
   db.query(query, params, (err, results) => {
@@ -106,18 +66,20 @@ app.get('/api/inventory', (req, res) => {
 
 app.post('/api/inventory', (req, res) => {
   const { 
-    name, category, sub_category, item_code, brand, size, design, surface, texture, class_type, special_specs, image_url, quantity, price 
+    name, category, item_code, brand, size, design, surface, texture, class_type, class: classVal, special_specs, quantity, price 
   } = req.body;
+
+  const resolvedClass = class_type || classVal || '';
 
   const query = `
     INSERT INTO appliances 
-    (name, category, sub_category, item_code, brand, size, design, surface, texture, class, special_specs, image_url, quantity, price) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (name, category, item_code, brand, size, design, surface, texture, class, special_specs, quantity, price) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.query(query, [
-    name, category || 'Furniture', sub_category || '', item_code || '', brand || '', size || '', design || '', 
-    surface || '', texture || '', class_type || '', special_specs || '', image_url || '', quantity, price
+    name, category || 'Furniture', item_code || '', brand || '', size || '', design || '', 
+    surface || '', texture || '', resolvedClass, special_specs || '', quantity, price
   ], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Item added successfully', id: result.insertId });
@@ -127,17 +89,19 @@ app.post('/api/inventory', (req, res) => {
 app.put('/api/inventory/:id', (req, res) => {
   const { id } = req.params;
   const { 
-    name, category, sub_category, item_code, brand, size, design, surface, texture, class_type, special_specs, image_url, quantity, price 
+    name, category, item_code, brand, size, design, surface, texture, class_type, class: classVal, special_specs, quantity, price 
   } = req.body;
+
+  const resolvedClass = class_type || classVal || '';
 
   const query = `
     UPDATE appliances SET 
-    name=?, category=?, sub_category=?, item_code=?, brand=?, size=?, design=?, surface=?, texture=?, class=?, special_specs=?, image_url=?, quantity=?, price=? 
+    name=?, category=?, item_code=?, brand=?, size=?, design=?, surface=?, texture=?, class=?, special_specs=?, quantity=?, price=? 
     WHERE id=?
   `;
 
   db.query(query, [
-    name, category, sub_category, item_code, brand, size, design, surface, texture, class_type, special_specs, image_url, quantity, price, id
+    name, category, item_code, brand, size, design, surface, texture, resolvedClass, special_specs, quantity, price, id
   ], (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Item updated successfully' });
@@ -182,18 +146,53 @@ app.get('/api/orders', (req, res) => {
   });
 });
 
+app.get('/api/purchases', (req, res) => {
+  db.query('SELECT * FROM purchases ORDER BY created_at DESC', (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(results);
+  });
+});
+
+app.post('/api/purchase', (req, res) => {
+  const { appliance_id, quantity, created_by } = req.body;
+
+  db.query('SELECT * FROM appliances WHERE id = ?', [appliance_id], (err, results) => {
+    if (err || results.length === 0) return res.status(404).json({ error: 'Product not found' });
+    
+    const product = results[0];
+    if (product.quantity < quantity) {
+      return res.status(400).json({ error: 'Not enough stock available!' });
+    }
+
+    const updatedQuantity = product.quantity - Number(quantity);
+    const totalPrice = quantity * product.price;
+
+    db.query('UPDATE appliances SET quantity = ? WHERE id = ?', [updatedQuantity, appliance_id], (updateErr) => {
+      if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+      const purchaseQuery = 'INSERT INTO purchases (appliance_id, appliance_name, quantity, total_price, purchased_by) VALUES (?, ?, ?, ?, ?)';
+      db.query(purchaseQuery, [appliance_id, product.name, quantity, totalPrice, created_by || 'Staff'], (purchErr) => {
+        if (purchErr) return res.status(500).json({ error: purchErr.message });
+        res.json({ message: 'Purchase successful, recorded to purchases table', newStock: updatedQuantity });
+      });
+    });
+  });
+});
+
+// ALWAYS EXPLICITLY SET 'Pending Restock'
 app.post('/api/orders', (req, res) => {
   const { appliance_id, appliance_name, quantity, total_price, created_by } = req.body;
   const query = 'INSERT INTO orders (appliance_id, appliance_name, quantity, total_price, status, created_by) VALUES (?, ?, ?, ?, ?, ?)';
-  db.query(query, [appliance_id, appliance_name, quantity, total_price, 'Pending', created_by || 'Admin'], (err, result) => {
+  db.query(query, [appliance_id, appliance_name, quantity, total_price, 'Pending Restock', created_by || 'Admin'], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Purchase request created successfully', orderId: result.insertId });
+    res.json({ message: 'Restock request sent to warehouse successfully', orderId: result.insertId });
   });
 });
 
 app.put('/api/orders/:id/status', (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
+  
   db.query('UPDATE orders SET status = ? WHERE id = ?', [status, id], (err) => {
     if (err) return res.status(500).json({ error: err.message });
 
@@ -209,7 +208,6 @@ app.put('/api/orders/:id/status', (req, res) => {
   });
 });
 
-// INCIDENT REPORT ROUTES
 app.get('/api/incidents', (req, res) => {
   db.query('SELECT * FROM incident_reports ORDER BY created_at DESC', (err, results) => {
     if (err) return res.status(500).json({ error: err.message });

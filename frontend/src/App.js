@@ -8,6 +8,8 @@ function App() {
   const [username, setUsername] = useState(() => localStorage.getItem('emerald_username') || '');
   const [activeTab, setActiveTab] = useState('home');
 
+  const [notiFilter, setNotiFilter] = useState('all');
+
   const [isRegistering, setIsRegistering] = useState(false);
   const [registerRole, setRegisterRole] = useState('staff');
   const [loginUsername, setLoginUsername] = useState('');
@@ -17,23 +19,21 @@ function App() {
 
   const [appliances, setAppliances] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [purchases, setPurchases] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [search, setSearch] = useState('');
 
-  // Main & Sub Category States
   const [selectedMainCategory, setSelectedMainCategory] = useState('All');
-  const [selectedSubCategory, setSelectedSubCategory] = useState('All');
 
-  // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
-  const [incidentForm, setIncidentForm] = useState({ title: '', description: '' });
+  const [incidentForm, setIncidentForm] = useState({ product_name: '', description: '' });
 
-  // New Product Form State
+  const categoriesList = ['Furniture', 'Storage and Organizer', 'Appliance'];
+
   const [productForm, setProductForm] = useState({
     name: '',
     category: 'Furniture',
-    sub_category: 'Chairs & Tables',
     item_code: '',
     brand: '',
     size: '',
@@ -42,7 +42,6 @@ function App() {
     texture: '',
     class_type: 'A',
     special_specs: '',
-    image_url: '',
     quantity: '',
     price: ''
   });
@@ -51,35 +50,12 @@ function App() {
   const [purchaseQty, setPurchaseQty] = useState(1);
   const [editFormData, setEditFormData] = useState({});
 
-  const categoryHierarchy = {
-    'Furniture': [
-      'Chairs & Tables',
-      'Racks & Shelves',
-      'Wardrobe & Cabinets',
-      'Office Furniture'
-    ],
-    'Storage and Organizer': [
-      'Laundry Organizers',
-      'Plastic Containers & Crates',
-      'Kitchen Storage & Accessories',
-      'Toolboxes & Storage Boxes'
-    ],
-    'Appliance': [
-      'Electric Fans',
-      'Washing Machines',
-      'Air Cooling & Conditioning',
-      'Small Home Appliances'
-    ]
-  };
-
   const fetchAppliances = useCallback(async () => {
     try {
       let url = 'http://localhost:5000/api/inventory';
       const params = new URLSearchParams();
 
       if (selectedMainCategory !== 'All') params.append('category', selectedMainCategory);
-      if (selectedSubCategory !== 'All') params.append('sub_category', selectedSubCategory);
-
       if (params.toString()) url += `?${params.toString()}`;
 
       const response = await axios.get(url);
@@ -87,16 +63,25 @@ function App() {
     } catch (error) {
       console.error('Error fetching inventory:', error);
     }
-  }, [selectedMainCategory, selectedSubCategory]);
+  }, [selectedMainCategory]);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       const response = await axios.get('http://localhost:5000/api/orders');
       setOrders(response.data);
     } catch (error) {
       console.error('Error fetching orders:', error);
     }
-  };
+  }, []);
+
+  const fetchPurchases = useCallback(async () => {
+    try {
+      const response = await axios.get('http://localhost:5000/api/purchases');
+      setPurchases(response.data);
+    } catch (error) {
+      console.error('Error fetching purchases:', error);
+    }
+  }, []);
 
   const fetchIncidents = useCallback(async () => {
     try {
@@ -111,9 +96,10 @@ function App() {
     if (isLoggedIn) {
       fetchAppliances();
       fetchOrders();
+      fetchPurchases();
       fetchIncidents();
     }
-  }, [isLoggedIn, fetchAppliances, fetchIncidents]);
+  }, [isLoggedIn, fetchAppliances, fetchOrders, fetchPurchases, fetchIncidents]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -156,14 +142,9 @@ function App() {
 
   const openAddModal = () => {
     const activeCat = selectedMainCategory !== 'All' ? selectedMainCategory : 'Furniture';
-    const activeSub = (selectedSubCategory !== 'All' && categoryHierarchy[activeCat]?.includes(selectedSubCategory))
-      ? selectedSubCategory
-      : categoryHierarchy[activeCat][0];
-
     setProductForm({
       name: '',
       category: activeCat,
-      sub_category: activeSub,
       item_code: '',
       brand: '',
       size: '',
@@ -172,7 +153,6 @@ function App() {
       texture: '',
       class_type: 'A',
       special_specs: '',
-      image_url: '',
       quantity: '',
       price: ''
     });
@@ -184,7 +164,6 @@ function App() {
     try {
       await axios.post('http://localhost:5000/api/inventory', {
         ...productForm,
-        image_url: productForm.image_url || 'https://via.placeholder.com/200?text=No+Image',
         quantity: Number(productForm.quantity),
         price: Number(productForm.price)
       });
@@ -193,7 +172,7 @@ function App() {
       alert('Product added successfully!');
     } catch (error) {
       console.error('Error adding product:', error);
-      alert('Failed to add item.');
+      alert(error.response?.data?.error || 'Failed to add item.');
     }
   };
 
@@ -201,26 +180,17 @@ function App() {
     e.preventDefault();
     try {
       await axios.post('http://localhost:5000/api/incidents', {
-        title: incidentForm.title,
+        title: incidentForm.product_name,
         description: incidentForm.description,
         reported_by: username || 'User'
       });
       setShowIncidentModal(false);
-      setIncidentForm({ title: '', description: '' });
+      setIncidentForm({ product_name: '', description: '' });
       fetchIncidents();
-      alert('Incident report submitted successfully!');
+      alert('Incident report submitted to warehouse successfully!');
     } catch (error) {
       console.error('Error submitting incident:', error);
-      alert('Failed to submit incident report. Ensure server.js has the /api/incidents route.');
-    }
-  };
-
-  const handleUpdateIncidentStatus = async (id, targetStatus) => {
-    try {
-      await axios.put(`http://localhost:5000/api/incidents/${id}/status`, { status: targetStatus });
-      fetchIncidents();
-    } catch (error) {
-      alert('Failed to update incident status.');
+      alert('Failed to submit incident report.');
     }
   };
 
@@ -230,8 +200,8 @@ function App() {
     setEditFormData({ ...item });
   };
 
-  const handleAdminPurchase = async () => {
-    if (purchaseQty <= 0) return alert('Please enter a valid purchase quantity!');
+  const handleAdminRestockRequest = async () => {
+    if (purchaseQty <= 0) return alert('Please enter a valid restock quantity!');
     const totalPrice = purchaseQty * selectedItem.price;
 
     try {
@@ -240,23 +210,57 @@ function App() {
         appliance_name: selectedItem.name,
         quantity: purchaseQty,
         total_price: totalPrice,
-        created_by: username || 'Admin'
+        created_by: username || userRole
       });
       setSelectedItem(null);
       fetchOrders();
-      alert('Purchase request created and sent to Staff.');
+      alert('Restock request sent to warehouse successfully!');
     } catch (error) {
-      alert('Failed to complete purchase.');
+      alert('Failed to send restock request.');
     }
   };
 
-  const handleUpdateOrderStatus = async (orderId, targetStatus) => {
+  const handleCustomerPurchase = async () => {
+    if (purchaseQty <= 0) return alert('Please enter a valid quantity to buy!');
+    if (purchaseQty > selectedItem.quantity) return alert('Not enough stock available!');
+
     try {
-      await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, { status: targetStatus });
-      fetchOrders();
+      await axios.post('http://localhost:5000/api/purchase', {
+        appliance_id: selectedItem.id,
+        quantity: purchaseQty,
+        created_by: username || 'Staff'
+      });
+      setSelectedItem(null);
       fetchAppliances();
+      fetchPurchases();
+      alert(`Successfully processed sale of ${purchaseQty}x ${selectedItem.name}! Recorded to history.`);
     } catch (error) {
+      alert(error.response?.data?.error || 'Failed to complete purchase.');
+    }
+  };
+
+  const handleUpdateOrderStatus = async (e, orderId, targetStatus) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    setOrders((prevOrders) =>
+      prevOrders.map((ord) =>
+        ord.id === orderId ? { ...ord, status: targetStatus } : ord
+      )
+    );
+
+    try {
+      const response = await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, { status: targetStatus });
+      if (response.status === 200) {
+        fetchOrders();
+        fetchAppliances();
+      }
+    } catch (error) {
+      console.error('Order status update error:', error);
       alert('Failed to update order status.');
+      fetchOrders();
     }
   };
 
@@ -281,19 +285,26 @@ function App() {
 
   const filteredAppliances = appliances.filter((item) => {
     const matchesMain = selectedMainCategory === 'All' || item.category === selectedMainCategory;
-    const matchesSub = selectedSubCategory === 'All' || 
-      (item.sub_category && item.sub_category.trim() === selectedSubCategory.trim());
     const matchesSearch = 
       item.name.toLowerCase().includes(search.toLowerCase()) ||
       (item.item_code && item.item_code.toLowerCase().includes(search.toLowerCase())) ||
       (item.brand && item.brand.toLowerCase().includes(search.toLowerCase()));
 
-    return matchesMain && matchesSub && matchesSearch;
+    return matchesMain && matchesSearch;
   });
 
-  const pendingOrdersCount = orders.filter((order) => order.status !== 'Received by Admin').length;
-  const openIncidentsCount = incidents.filter((inc) => inc.status === 'Open').length;
-  const totalNotificationBadge = pendingOrdersCount + openIncidentsCount;
+  const pendingRestocks = orders.filter((order) => {
+    const st = (order.status || '').toLowerCase();
+    return st !== 'received by admin';
+  });
+
+  const successfulRestocks = orders.filter((order) => {
+    const st = (order.status || '').toLowerCase();
+    return st === 'received by admin';
+  });
+
+  const openIncidents = incidents.filter((inc) => inc.status === 'Open');
+  const totalNotificationBadge = pendingRestocks.length + openIncidents.length;
 
   if (!isLoggedIn) {
     return (
@@ -311,6 +322,7 @@ function App() {
               <select value={registerRole} onChange={(e) => setRegisterRole(e.target.value)} className="dropdown-input">
                 <option value="staff">Staff</option>
                 <option value="admin">Admin</option>
+                <option value="warehouse">Warehouse</option>
               </select>
             </div>
           )}
@@ -330,16 +342,27 @@ function App() {
       <div className="top-header">
         <div className="header-title-area">
           <h1>Emerald Purchase and Management System</h1>
-          <p>Browse products, manage inventory stock, and track order notifications.</p>
           <small style={{ color: '#81c784' }}>Logged in as: <strong>{userRole.toUpperCase()}</strong> ({username})</small>
         </div>
         <div className="top-right-nav">
           <button className={`nav-btn ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>Home</button>
           <button className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
-          <button className={`nav-btn ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>
-            Notification {totalNotificationBadge > 0 && <span className="badge">{totalNotificationBadge}</span>}
-          </button>
-          <button className={`nav-btn ${activeTab === 'services' ? 'active' : ''}`} onClick={() => setActiveTab('services')}>Services</button>
+          
+          {(userRole === 'admin' || userRole === 'warehouse') && (
+            <button className={`nav-btn ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>
+              Notification {totalNotificationBadge > 0 && <span className="badge">{totalNotificationBadge}</span>}
+            </button>
+          )}
+          {userRole === 'staff' && (
+            <button className={`nav-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+              Purchase History {purchases.length > 0 && <span className="badge">{purchases.length}</span>}
+            </button>
+          )}
+
+          {userRole !== 'staff' && userRole !== 'warehouse' && (
+            <button className={`nav-btn ${activeTab === 'services' ? 'active' : ''}`} onClick={() => setActiveTab('services')}>Services</button>
+          )}
+
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </div>
@@ -351,45 +374,22 @@ function App() {
             <div className="category-grid">
               <div 
                 className={`category-card ${selectedMainCategory === 'All' ? 'active' : ''}`} 
-                onClick={() => { setSelectedMainCategory('All'); setSelectedSubCategory('All'); }}
+                onClick={() => setSelectedMainCategory('All')}
               >
                 <span className="cat-icon">📦</span>
                 <span>All Categories</span>
               </div>
-              {Object.keys(categoryHierarchy).map((mainCat) => (
+              {categoriesList.map((mainCat) => (
                 <div 
                   key={mainCat} 
                   className={`category-card ${selectedMainCategory === mainCat ? 'active' : ''}`} 
-                  onClick={() => { setSelectedMainCategory(mainCat); setSelectedSubCategory('All'); }}
+                  onClick={() => setSelectedMainCategory(mainCat)}
                 >
                   <span className="cat-icon">{mainCat === 'Furniture' ? '🛋️' : mainCat === 'Storage and Organizer' ? '📦' : '🔌'}</span>
                   <span>{mainCat}</span>
                 </div>
               ))}
             </div>
-
-            {selectedMainCategory !== 'All' && (
-              <div className="subcategory-bar">
-                <span style={{ color: '#81c784', fontSize: '0.85rem', fontWeight: 'bold' }}>Sub-Categories under {selectedMainCategory}:</span>
-                <div className="subcategory-chips">
-                  <button 
-                    className={`sub-chip ${selectedSubCategory === 'All' ? 'active' : ''}`}
-                    onClick={() => setSelectedSubCategory('All')}
-                  >
-                    All Types
-                  </button>
-                  {categoryHierarchy[selectedMainCategory].map((subCat) => (
-                    <button 
-                      key={subCat} 
-                      className={`sub-chip ${selectedSubCategory === subCat ? 'active' : ''}`}
-                      onClick={() => setSelectedSubCategory(subCat)}
-                    >
-                      {subCat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '20px 0', flexWrap: 'wrap', gap: '10px' }}>
@@ -402,7 +402,7 @@ function App() {
             )}
           </div>
 
-          <h3>Product Catalog ({selectedMainCategory} {selectedSubCategory !== 'All' ? `> ${selectedSubCategory}` : ''})</h3>
+          <h3>Product Catalog ({selectedMainCategory})</h3>
           
           <div className="product-grid">
             {filteredAppliances.length > 0 ? (
@@ -411,13 +411,12 @@ function App() {
                 return (
                   <div key={item.id} className="product-card" onClick={() => openCardModal(item)}>
                     <div style={{ position: 'relative' }}>
-                      <img src={item.image_url || 'https://via.placeholder.com/200?text=No+Image'} alt={item.name} className="product-image" />
-                      {isLowStock && <span className="low-stock-badge" title="Low Stock!">!</span>}
+                      <img src="https://via.placeholder.com/200?text=No+Image" alt={item.name} className="product-image" />
+                      {isLowStock && <span className="low-stock-badge" title="Low Stock (&le; 50%)!">!</span>}
                     </div>
                     <div className="product-name">{item.name}</div>
                     
                     <div className="product-specs-list">
-                      {item.sub_category && <div className="spec-row"><span className="spec-label">Sub Category:</span> <span className="spec-val">{item.sub_category}</span></div>}
                       {item.item_code && <div className="spec-row"><span className="spec-label">Item Code:</span> <span className="spec-val">{item.item_code}</span></div>}
                       {item.brand && <div className="spec-row"><span className="spec-label">Brand:</span> <span className="spec-val">{item.brand}</span></div>}
                       {item.size && <div className="spec-row"><span className="spec-label">Size:</span> <span className="spec-val">{item.size}</span></div>}
@@ -429,7 +428,9 @@ function App() {
                     </div>
 
                     <div className="product-price">₱{Number(item.price).toFixed(2)}</div>
-                    <div className="product-stock" style={{ color: isLowStock ? '#ef5350' : '#b0bec5' }}>Stock: {item.quantity}</div>
+                    <div className="product-stock" style={{ color: isLowStock ? '#ef5350' : '#b0bec5' }}>
+                      Stock: {item.quantity} {isLowStock && '(Low Stock!)'}
+                    </div>
                   </div>
                 );
               })
@@ -441,127 +442,288 @@ function App() {
       )}
 
       {activeTab === 'dashboard' && (
-        <div className="tab-content">
-          <div className="services-section">
-            <h3>System Dashboard Overview</h3>
-            <div className="services-grid">
-              <div className="service-card"><h4>📦 Total Products</h4><p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#81c784' }}>{appliances.length}</p></div>
-              <div className="service-card"><h4>📋 Total Orders</h4><p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#81c784' }}>{orders.length}</p></div>
-              <div className="service-card"><h4>⚠️ Open Incidents</h4><p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ef5350' }}>{openIncidentsCount}</p></div>
+        <div className="tab-content" style={{ paddingBottom: '20px' }}>
+          <div className="services-section" style={{ padding: '15px 20px' }}>
+            <h3 style={{ marginBottom: '15px' }}>Dashboard Overview</h3>
+            <div className="services-grid" style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+              <div className="service-card" style={{ flex: '1 1 200px', padding: '15px' }}>
+                <h4>📦 Total Products</h4>
+                <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#81c784', margin: '5px 0 0' }}>{appliances.length}</p>
+              </div>
+              {userRole === 'admin' && (
+                <>
+                  <div className="service-card" style={{ flex: '1 1 200px', padding: '15px' }}>
+                    <h4>📋 Total Orders</h4>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#81c784', margin: '5px 0 0' }}>{orders.length}</p>
+                  </div>
+                  <div className="service-card" style={{ flex: '1 1 200px', padding: '15px' }}>
+                    <h4>⚠️ Open Incidents</h4>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ef5350', margin: '5px 0 0' }}>{openIncidents.length}</p>
+                  </div>
+                </>
+              )}
+              {userRole === 'staff' && (
+                <div className="service-card" style={{ flex: '1 1 200px', padding: '15px' }}>
+                  <h4>🛒 Total Purchases Recorded</h4>
+                  <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#81c784', margin: '5px 0 0' }}>{purchases.length}</p>
+                </div>
+              )}
+              {userRole === 'warehouse' && (
+                <>
+                  <div className="service-card" style={{ flex: '1 1 200px', padding: '15px' }}>
+                    <h4>🚚 Pending Restocks</h4>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ff8f00', margin: '5px 0 0' }}>{pendingRestocks.length}</p>
+                  </div>
+                  <div className="service-card" style={{ flex: '1 1 200px', padding: '15px' }}>
+                    <h4>✅ Successful Restocks</h4>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#81c784', margin: '5px 0 0' }}>{successfulRestocks.length}</p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* NOTIFICATION TAB WITH INCIDENT REPORTS */}
-      {activeTab === 'notifications' && (
+      {/* PURCHASE HISTORY TABLE FOR STAFF */}
+      {activeTab === 'history' && userRole === 'staff' && (
+        <div className="tab-content" style={{ paddingBottom: '20px' }}>
+          <div className="notification-section" style={{ padding: '20px', background: '#101612', borderRadius: '8px' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ffffff', marginBottom: '20px' }}>
+              🛒 Customer Purchase History
+            </h3>
+            {purchases.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', background: '#101612', color: '#e0e0e0' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #1a261c', color: '#81c784', fontSize: '0.95rem' }}>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>ID</th>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>Item Name</th>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>Qty</th>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>Total Price</th>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>Processed By</th>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>Date / Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {purchases.map((p) => (
+                      <tr key={p.id} style={{ borderBottom: '1px solid #162018' }}>
+                        <td style={{ padding: '12px 16px', color: '#b0bec5' }}>#{p.id}</td>
+                        <td style={{ padding: '12px 16px', fontWeight: 'bold', color: '#ffffff' }}>{p.appliance_name}</td>
+                        <td style={{ padding: '12px 16px', color: '#e0e0e0' }}>{p.quantity}</td>
+                        <td style={{ padding: '12px 16px', color: '#81c784', fontWeight: '500' }}>₱{Number(p.total_price).toFixed(2)}</td>
+                        <td style={{ padding: '12px 16px', color: '#b0bec5' }}>{p.purchased_by}</td>
+                        <td style={{ padding: '12px 16px', color: '#b0bec5', fontSize: '0.9rem' }}>{p.created_at ? new Date(p.created_at).toLocaleString() : 'N/A'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="no-notifications">No purchase records found yet.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* NOTIFICATIONS TAB */}
+      {activeTab === 'notifications' && (userRole === 'admin' || userRole === 'warehouse') && (
         <div className="tab-content">
           <div className="notification-section">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-              <h3 style={{ margin: 0 }}>🚨 Incident Reports & Feedback</h3>
-              <button className="btn-add" onClick={() => setShowIncidentModal(true)} style={{ backgroundColor: '#d32f2f' }}>
-                + File Incident Report
-              </button>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              <button className={`sub-chip ${notiFilter === 'all' ? 'active' : ''}`} onClick={() => setNotiFilter('all')}>All Notifications</button>
+              <button className={`sub-chip ${notiFilter === 'restocks' ? 'active' : ''}`} onClick={() => setNotiFilter('restocks')}>🚚 Restock Requests {pendingRestocks.length > 0 && `(${pendingRestocks.length})`}</button>
+              <button className={`sub-chip ${notiFilter === 'incidents' ? 'active' : ''}`} onClick={() => setNotiFilter('incidents')}>🚨 Incident Reports {openIncidents.length > 0 && `(${openIncidents.length})`}</button>
             </div>
 
-            <div className="orders-grid" style={{ marginBottom: '30px' }}>
-              {incidents.length > 0 ? (
-                incidents.map((inc) => {
-                  const isOpen = inc.status === 'Open';
-                  return (
-                    <div key={inc.id} className={`order-card ${isOpen ? 'status-yellow' : 'status-green'}`}>
-                      <div className="order-header">
-                        <strong>Incident #{inc.id}: {inc.title}</strong>
-                        <span className="order-status-badge">{inc.status}</span>
-                      </div>
-                      <div className="order-details">
-                        <p><strong>Description:</strong> {inc.description}</p>
-                        <p><small>Reported by: {inc.reported_by} on {new Date(inc.created_at).toLocaleString()}</small></p>
-                      </div>
-                      {userRole === 'staff' && isOpen && (
-                        <button className="btn-status-action" style={{ backgroundColor: '#2e7d32' }} onClick={() => handleUpdateIncidentStatus(inc.id, 'Resolved')}>
-                          Mark as Resolved
-                        </button>
-                      )}
-                      {!isOpen && <div className="status-note-success"><small>✅ Resolved</small></div>}
-                    </div>
-                  );
-                })
-              ) : (<p className="no-notifications">No incident reports found.</p>)}
-            </div>
+            {(notiFilter === 'all' || notiFilter === 'incidents') && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3 style={{ margin: 0, color: '#ffffff' }}>🚨 Incident Reports</h3>
+                  {userRole === 'admin' && (
+                    <button className="btn-add" onClick={() => setShowIncidentModal(true)} style={{ backgroundColor: '#d32f2f' }}>+ File Incident Report</button>
+                  )}
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '30px' }}>
+                  {incidents.length > 0 ? (
+                    incidents.map((inc) => {
+                      const isOpen = inc.status === 'Open';
+                      return (
+                        <div key={inc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#101612', padding: '16px 20px', borderRadius: '8px', borderLeft: `4px solid ${isOpen ? '#ff8f00' : '#81c784'}`, border: '1px solid #1a261c' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                              <strong style={{ color: '#ffffff', fontSize: '1rem' }}>Product: {inc.title}</strong>
+                              <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: isOpen ? 'rgba(255, 143, 0, 0.2)' : 'rgba(129, 199, 132, 0.2)', color: isOpen ? '#ffb74d' : '#81c784', fontWeight: 'bold' }}>
+                                {inc.status}
+                              </span>
+                            </div>
+                            <p style={{ color: '#b0bec5', fontSize: '0.9rem', margin: '0 0 6px 0' }}><strong>Issue:</strong> {inc.description}</p>
+                            <small style={{ color: '#78909c' }}>Reported by: <strong>{inc.reported_by}</strong></small>
+                          </div>
+                          <div>
+                            {userRole === 'admin' && isOpen && (
+                              <button 
+                                onClick={async () => {
+                                  try {
+                                    await axios.put(`http://localhost:5000/api/incidents/${inc.id}/status`, { status: 'Resolved' });
+                                    fetchIncidents();
+                                  } catch (err) {
+                                    alert('Failed to update status');
+                                  }
+                                }}
+                                style={{ backgroundColor: '#2e7d32', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+                              >
+                                Mark as Resolved
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="no-notifications" style={{ background: '#101612', padding: '20px', borderRadius: '8px', textAlign: 'center', color: '#b0bec5' }}>No incident reports found.</p>
+                  )}
+                </div>
+              </>
+            )}
 
-            <h3>{userRole === 'admin' ? 'Admin Purchase Records & Live Order Status' : 'Staff Purchase Notifications & Dispatch Tracker'}</h3>
-            <div className="orders-grid">
-              {orders.length > 0 ? (
-                orders.map((order) => {
-                  const isGreen = order.status === 'Shipped' || order.status === 'Received by Admin';
-                  return (
-                    <div key={order.id} className={`order-card ${isGreen ? 'status-green' : 'status-yellow'}`}>
-                      <div className="order-header"><strong>Order #{order.id}</strong><span className="order-status-badge">{order.status}</span></div>
-                      <div className="order-details">
-                        <p><strong>Item:</strong> {order.appliance_name}</p>
-                        <p><strong>Qty:</strong> {order.quantity} | <strong>Total:</strong> ₱{Number(order.total_price).toFixed(2)}</p>
-                        <p><small>Purchased by: {order.created_by}</small></p>
-                      </div>
-                      {userRole === 'staff' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
-                          {order.status === 'Pending' && <button className="btn-status-action" onClick={() => handleUpdateOrderStatus(order.id, 'Received by Staff')}>Receive Purchase</button>}
-                          {order.status === 'Received by Staff' && <button className="btn-status-action" style={{ backgroundColor: '#1b5e20' }} onClick={() => handleUpdateOrderStatus(order.id, 'Shipped')}>Shipped Purchase</button>}
-                          {order.status === 'Shipped' && <div className="status-note"><small>✈️ Shipped! Waiting for Admin...</small></div>}
-                          {order.status === 'Received by Admin' && <div className="status-note-success"><small>✅ Received Successfully!</small></div>}
-                        </div>
-                      )}
-                      {userRole === 'admin' && (
-                        <div style={{ marginTop: '10px' }}>
-                          {order.status === 'Shipped' ? (
-                            <button className="btn-status-action" style={{ backgroundColor: '#2e7d32' }} onClick={() => handleUpdateOrderStatus(order.id, 'Received by Admin')}>Confirm Received</button>
-                          ) : (
-                            <div className="admin-status-note"><small>Live Status: <strong>{order.status}</strong></small></div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              ) : (<p className="no-notifications">No purchase records found</p>)}
-            </div>
+            {(notiFilter === 'all' || notiFilter === 'restocks') && (
+              <div style={{ padding: '20px', background: '#101612', borderRadius: '8px' }}>
+                <h3 style={{ color: '#ffffff', marginBottom: '20px' }}>🚚 Warehouse & Admin Restock Tracker</h3>
+                {orders.length > 0 ? (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', background: '#101612', color: '#e0e0e0' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #1a261c', color: '#81c784', fontSize: '0.95rem' }}>
+                          <th style={{ padding: '12px 16px', fontWeight: '600' }}>ID</th>
+                          <th style={{ padding: '12px 16px', fontWeight: '600' }}>Item Name</th>
+                          <th style={{ padding: '12px 16px', fontWeight: '600' }}>Qty</th>
+                          <th style={{ padding: '12px 16px', fontWeight: '600' }}>Total Price</th>
+                          <th style={{ padding: '12px 16px', fontWeight: '600' }}>Status</th>
+                          <th style={{ padding: '12px 16px', fontWeight: '600' }}>Action / Workflow</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orders.map((order) => {
+                          const rawStatus = order.status ? order.status.trim() : 'Pending Restock';
+                          const statusLower = rawStatus.toLowerCase();
+
+                          const isPending = statusLower === 'pending restock' || statusLower === '';
+                          const isReceivedByWarehouse = statusLower === 'restock received by warehouse';
+                          const isShipping = statusLower === 'shipping';
+                          const isCompleted = statusLower === 'received by admin';
+
+                          const currentRole = (userRole || '').toLowerCase();
+
+                          return (
+                            <tr key={order.id} style={{ borderBottom: '1px solid #162018' }}>
+                              <td style={{ padding: '12px 16px', color: '#b0bec5' }}>#{order.id}</td>
+                              <td style={{ padding: '12px 16px', fontWeight: 'bold', color: '#ffffff' }}>{order.appliance_name}</td>
+                              <td style={{ padding: '12px 16px', color: '#e0e0e0' }}>{order.quantity}</td>
+                              <td style={{ padding: '12px 16px', color: '#81c784', fontWeight: '500' }}>₱{Number(order.total_price).toFixed(2)}</td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', background: isCompleted ? '#1b5e20' : '#ff8f00', color: '#ffffff' }}>
+                                  {rawStatus}
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px' }}>
+                                {/* WAREHOUSE WORKFLOW CONTROLS */}
+                                {currentRole === 'warehouse' && (
+                                  <div>
+                                    {isPending && (
+                                      <button 
+                                        type="button"
+                                        onClick={(e) => handleUpdateOrderStatus(e, order.id, 'Restock Received by Warehouse')}
+                                        style={{ backgroundColor: '#ff8f00', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                                      >
+                                        Receive Purchase
+                                      </button>
+                                    )}
+                                    {isReceivedByWarehouse && (
+                                      <button 
+                                        type="button"
+                                        onClick={(e) => handleUpdateOrderStatus(e, order.id, 'Shipping')}
+                                        style={{ backgroundColor: '#1b5e20', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                                      >
+                                        Shipping
+                                      </button>
+                                    )}
+                                    {isShipping && <span style={{ color: '#81c784', fontSize: '0.85rem' }}>✈️ Shipped to Admin</span>}
+                                    {isCompleted && <span style={{ color: '#81c784', fontSize: '0.85rem' }}>✅ Completed</span>}
+                                  </div>
+                                )}
+
+                                {/* ADMIN WORKFLOW CONTROLS */}
+                                {currentRole === 'admin' && (
+                                  <div>
+                                    {isPending && <span style={{ color: '#ffb74d', fontSize: '0.85rem' }}>⌛ Waiting for Warehouse</span>}
+                                    {isReceivedByWarehouse && <span style={{ color: '#81c784', fontSize: '0.85rem' }}>📦 Received by Warehouse</span>}
+                                    {isShipping && (
+                                      <button 
+                                        type="button"
+                                        onClick={(e) => handleUpdateOrderStatus(e, order.id, 'Received by Admin')}
+                                        style={{ backgroundColor: '#2e7d32', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                                      >
+                                        Receive Shipping
+                                      </button>
+                                    )}
+                                    {isCompleted && <span style={{ color: '#81c784', fontSize: '0.85rem' }}>✅ Stock Updated</span>}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="no-notifications">No active restock requests.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {activeTab === 'services' && (
+      {activeTab === 'services' && userRole !== 'staff' && userRole !== 'warehouse' && (
         <div className="tab-content">
           <div className="services-section">
             <h3>Emerald System Services</h3>
-            <div className="services-grid">
-              <div className="service-card"><h4>📦 Inventory Management</h4><p>Track stock levels in real time across hierarchical categories.</p></div>
-              <div className="service-card"><h4>🚚 Order Processing</h4><p>Streamline purchases through automated workflows.</p></div>
+            <div className="services-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
+              <div className="service-card" style={{ padding: '20px', background: '#101612', borderRadius: '8px' }}>
+                <h4 style={{ color: '#81c784', marginBottom: '8px' }}>📦 Inventory Management</h4>
+                <p style={{ color: '#b0bec5', fontSize: '0.9rem', margin: 0 }}>Track stock levels and catalog items in real time.</p>
+              </div>
+              <div className="service-card" style={{ padding: '20px', background: '#101612', borderRadius: '8px' }}>
+                <h4 style={{ color: '#81c784', marginBottom: '8px' }}>🚚 Order Processing</h4>
+                <p style={{ color: '#b0bec5', fontSize: '0.9rem', margin: 0 }}>Streamline and monitor restocks across roles seamlessly.</p>
+              </div>
+              <div className="service-card" style={{ padding: '20px', background: '#101612', borderRadius: '8px' }}>
+                <h4 style={{ color: '#81c784', marginBottom: '8px' }}>👥 User Roles & Access</h4>
+                <p style={{ color: '#b0bec5', fontSize: '0.9rem', margin: 0 }}>Oversee admin, warehouse, and staff permissions securely.</p>
+              </div>
+              <div className="service-card" style={{ padding: '20px', background: '#101612', borderRadius: '8px' }}>
+                <h4 style={{ color: '#81c784', marginBottom: '8px' }}>🚨 System Incident Logs</h4>
+                <p style={{ color: '#b0bec5', fontSize: '0.9rem', margin: 0 }}>File and manage incident reports sent directly to the warehouse.</p>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* POPUP MODAL FOR FILING INCIDENT REPORT */}
       {showIncidentModal && (
         <div className="modal-overlay" onClick={() => setShowIncidentModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Report an Incident / Issue</h2>
+            <h2>Report an Incident</h2>
             <form onSubmit={handleAddIncident}>
               <div className="modal-inputs">
-                <label>Issue Title</label>
-                <input type="text" placeholder="e.g., Broken Shelf, Missing Stock" value={incidentForm.title} onChange={(e) => setIncidentForm({...incidentForm, title: e.target.value})} required />
-
-                <label>Description & Feedback</label>
-                <textarea 
-                  rows="4" 
-                  placeholder="Describe what went wrong in detail..." 
-                  value={incidentForm.description} 
-                  onChange={(e) => setIncidentForm({...incidentForm, description: e.target.value})} 
-                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #2e7d32', background: '#121814', color: 'white', resize: 'vertical' }}
-                  required 
-                />
+                <label>Product Name</label>
+                <input type="text" placeholder="e.g. Office Chair" value={incidentForm.product_name} onChange={(e) => setIncidentForm({...incidentForm, product_name: e.target.value})} required />
+                <label>Description (Damaged, Missing, etc.)</label>
+                <textarea rows="4" placeholder="e.g. 2 pieces arrived damaged" value={incidentForm.description} onChange={(e) => setIncidentForm({...incidentForm, description: e.target.value})} required />
               </div>
-
               <div className="action-buttons" style={{ marginTop: '20px' }}>
                 <button type="submit" className="btn-add" style={{ backgroundColor: '#d32f2f' }}>Submit Report</button>
                 <button type="button" className="btn-cancel" onClick={() => setShowIncidentModal(false)}>Cancel</button>
@@ -571,71 +733,25 @@ function App() {
         </div>
       )}
 
-      {/* POPUP MODAL FOR ADDING NEW PRODUCT */}
       {showAddModal && (
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Add New Product & Specifications</h2>
+            <h2>Add New Product</h2>
             <form onSubmit={handleAddAppliance}>
               <div className="modal-inputs">
-                <label>Product Name</label>
-                <input type="text" placeholder="Product Name" value={productForm.name} onChange={(e) => setProductForm({...productForm, name: e.target.value})} required />
-
-                <label>Main Category</label>
-                <select 
-                  value={productForm.category} 
-                  onChange={(e) => {
-                    const newCat = e.target.value;
-                    setProductForm({...productForm, category: newCat, sub_category: categoryHierarchy[newCat][0]});
-                  }} 
-                  className="dropdown-input"
-                >
-                  {Object.keys(categoryHierarchy).map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-
-                <label>Sub Category / Type</label>
-                <select 
-                  value={productForm.sub_category} 
-                  onChange={(e) => setProductForm({...productForm, sub_category: e.target.value})} 
-                  className="dropdown-input"
-                >
-                  {categoryHierarchy[productForm.category]?.map(sub => <option key={sub} value={sub}>{sub}</option>)}
-                </select>
-
-                <label>Item Code</label>
-                <input type="text" placeholder="Item Code" value={productForm.item_code} onChange={(e) => setProductForm({...productForm, item_code: e.target.value})} />
-
-                <label>Brand</label>
-                <input type="text" placeholder="Brand" value={productForm.brand} onChange={(e) => setProductForm({...productForm, brand: e.target.value})} />
-
-                <label>Size</label>
-                <input type="text" placeholder="Size" value={productForm.size} onChange={(e) => setProductForm({...productForm, size: e.target.value})} />
-
-                <label>Design</label>
-                <input type="text" placeholder="Design" value={productForm.design} onChange={(e) => setProductForm({...productForm, design: e.target.value})} />
-
-                <label>Surface</label>
-                <input type="text" placeholder="Surface" value={productForm.surface} onChange={(e) => setProductForm({...productForm, surface: e.target.value})} />
-
-                <label>Texture</label>
-                <input type="text" placeholder="Texture" value={productForm.texture} onChange={(e) => setProductForm({...productForm, texture: e.target.value})} />
-
-                <label>Class</label>
-                <input type="text" placeholder="Class" value={productForm.class_type} onChange={(e) => setProductForm({...productForm, class_type: e.target.value})} />
-
-                <label>Special Specs</label>
-                <input type="text" placeholder="Special Specs" value={productForm.special_specs} onChange={(e) => setProductForm({...productForm, special_specs: e.target.value})} />
-
-                <label>Image URL</label>
-                <input type="text" placeholder="Image URL" value={productForm.image_url} onChange={(e) => setProductForm({...productForm, image_url: e.target.value})} />
-
-                <label>Quantity</label>
-                <input type="number" placeholder="Quantity" value={productForm.quantity} onChange={(e) => setProductForm({...productForm, quantity: e.target.value})} required />
-
-                <label>Price (₱)</label>
-                <input type="number" step="0.01" placeholder="Price" value={productForm.price} onChange={(e) => setProductForm({...productForm, price: e.target.value})} required />
+                <label>Product Name</label><input type="text" value={productForm.name} onChange={(e) => setProductForm({...productForm, name: e.target.value})} required />
+                <label>Category</label><select value={productForm.category} onChange={(e) => setProductForm({...productForm, category: e.target.value})} className="dropdown-input">{categoriesList.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                <label>Item Code</label><input type="text" value={productForm.item_code} onChange={(e) => setProductForm({...productForm, item_code: e.target.value})} />
+                <label>Brand</label><input type="text" value={productForm.brand} onChange={(e) => setProductForm({...productForm, brand: e.target.value})} />
+                <label>Size</label><input type="text" value={productForm.size} onChange={(e) => setProductForm({...productForm, size: e.target.value})} />
+                <label>Design</label><input type="text" value={productForm.design} onChange={(e) => setProductForm({...productForm, design: e.target.value})} />
+                <label>Surface</label><input type="text" value={productForm.surface} onChange={(e) => setProductForm({...productForm, surface: e.target.value})} />
+                <label>Texture</label><input type="text" value={productForm.texture} onChange={(e) => setProductForm({...productForm, texture: e.target.value})} />
+                <label>Class</label><input type="text" value={productForm.class_type} onChange={(e) => setProductForm({...productForm, class_type: e.target.value})} />
+                <label>Special Specs</label><input type="text" value={productForm.special_specs} onChange={(e) => setProductForm({...productForm, special_specs: e.target.value})} />
+                <label>Quantity</label><input type="number" value={productForm.quantity} onChange={(e) => setProductForm({...productForm, quantity: e.target.value})} required />
+                <label>Price (₱)</label><input type="number" step="0.01" value={productForm.price} onChange={(e) => setProductForm({...productForm, price: e.target.value})} required />
               </div>
-
               <div className="action-buttons" style={{ marginTop: '20px' }}>
                 <button type="submit" className="btn-add">Save Product</button>
                 <button type="button" className="btn-cancel" onClick={() => setShowAddModal(false)}>Cancel</button>
@@ -645,75 +761,69 @@ function App() {
         </div>
       )}
 
-      {/* POPUP MODAL FOR PRODUCT DETAILS & EDITING/PURCHASING */}
       {selectedItem && (
         <div className="modal-overlay" onClick={() => setSelectedItem(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>{selectedItem.name}</h2>
-            <img src={selectedItem.image_url || 'https://via.placeholder.com/200?text=No+Image'} alt={selectedItem.name} className="modal-image" />
+            <img src="https://via.placeholder.com/200?text=No+Image" alt={selectedItem.name} className="modal-image" />
 
             {userRole === 'admin' ? (
               <div className="modal-inputs">
-                <h4>Edit Item Information & Specifications</h4>
+                <h4>Edit Item Information & Restock</h4>
                 <label>Name</label><input type="text" value={editFormData.name || ''} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} />
-                <label>Main Category</label>
-                <select 
-                  value={editFormData.category || 'Furniture'} 
-                  onChange={(e) => {
-                    const newCat = e.target.value;
-                    setEditFormData({...editFormData, category: newCat, sub_category: categoryHierarchy[newCat]?.[0] || ''});
-                  }} 
-                  className="dropdown-input"
-                >
-                  {Object.keys(categoryHierarchy).map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-
-                <label>Sub Category / Type</label>
-                <select 
-                  value={editFormData.sub_category || ''} 
-                  onChange={(e) => setEditFormData({...editFormData, sub_category: e.target.value})} 
-                  className="dropdown-input"
-                >
-                  {categoryHierarchy[editFormData.category || 'Furniture']?.map(sub => <option key={sub} value={sub}>{sub}</option>)}
-                </select>
-
+                <label>Category</label><select value={editFormData.category || 'Furniture'} onChange={(e) => setEditFormData({...editFormData, category: e.target.value})} className="dropdown-input">{categoriesList.map(c => <option key={c} value={c}>{c}</option>)}</select>
                 <label>Item Code</label><input type="text" value={editFormData.item_code || ''} onChange={(e) => setEditFormData({...editFormData, item_code: e.target.value})} />
                 <label>Brand</label><input type="text" value={editFormData.brand || ''} onChange={(e) => setEditFormData({...editFormData, brand: e.target.value})} />
-                <label>Size</label><input type="text" value={editFormData.size || ''} onChange={(e) => setEditFormData({...editFormData, size: e.target.value})} />
-                <label>Design</label><input type="text" value={editFormData.design || ''} onChange={(e) => setEditFormData({...editFormData, design: e.target.value})} />
-                <label>Surface</label><input type="text" value={editFormData.surface || ''} onChange={(e) => setEditFormData({...editFormData, surface: e.target.value})} />
-                <label>Texture</label><input type="text" value={editFormData.texture || ''} onChange={(e) => setEditFormData({...editFormData, texture: e.target.value})} />
-                <label>Class</label><input type="text" value={editFormData.class || ''} onChange={(e) => setEditFormData({...editFormData, class: e.target.value})} />
-                <label>Special Specs</label><input type="text" value={editFormData.special_specs || ''} onChange={(e) => setEditFormData({...editFormData, special_specs: e.target.value})} />
-                <label>Image URL</label><input type="text" value={editFormData.image_url || ''} onChange={(e) => setEditFormData({...editFormData, image_url: e.target.value})} />
-                <label>Quantity</label><input type="number" value={editFormData.quantity || 0} onChange={(e) => setEditFormData({...editFormData, quantity: e.target.value})} />
+                <label>Quantity (Stock)</label><input type="number" value={editFormData.quantity || 0} onChange={(e) => setEditFormData({...editFormData, quantity: e.target.value})} />
                 <label>Price (₱)</label><input type="number" step="0.01" value={editFormData.price || 0} onChange={(e) => setEditFormData({...editFormData, price: e.target.value})} />
 
                 <hr style={{ borderColor: '#37474f', margin: '15px 0' }} />
-                <h4>Admin Purchase Request (Restock)</h4>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <label>Quantity to Purchase:</label>
-                  <input type="number" min="1" value={purchaseQty} onChange={(e) => setPurchaseQty(Number(e.target.value))} style={{ width: '70px', textAlign: 'center' }} />
+                
+                <h4>Request Warehouse Restock</h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                  <label style={{ fontSize: '0.85rem' }}>Restock Quantity:</label>
+                  <input type="number" min="1" value={purchaseQty} onChange={(e) => setPurchaseQty(Number(e.target.value))} style={{ width: '80px', textAlign: 'center', padding: '6px' }} />
                 </div>
+
                 <div className="action-buttons">
-                  <button className="btn-save" onClick={handleAdminPurchase}>Purchase Item</button>
+                  <button className="btn-save" style={{ backgroundColor: '#ff8f00' }} onClick={handleAdminRestockRequest}>Restock</button>
                   <button className="btn-save" style={{ backgroundColor: '#1976d2' }} onClick={handleAdminSaveEdit}>Save Changes</button>
                   <button className="btn-delete" onClick={() => handleDelete(selectedItem.id)}>Delete Item</button>
                   <button className="btn-cancel" onClick={() => setSelectedItem(null)}>Close</button>
                 </div>
               </div>
-            ) : (
+            ) : userRole === 'staff' ? (
               <div>
                 <p><strong>Brand:</strong> {selectedItem.brand}</p>
                 <p><strong>Item Code:</strong> {selectedItem.item_code}</p>
-                <p><strong>Category:</strong> {selectedItem.category} &gt; {selectedItem.sub_category}</p>
-                <p><strong>Size:</strong> {selectedItem.size}</p>
-                <p><strong>Design:</strong> {selectedItem.design}</p>
-                <p><strong>Surface:</strong> {selectedItem.surface} | <strong>Texture:</strong> {selectedItem.texture}</p>
-                <p><strong>Class:</strong> {selectedItem.class} | <strong>Specs:</strong> {selectedItem.special_specs}</p>
+                <p><strong>Category:</strong> {selectedItem.category}</p>
                 <p><strong>Price:</strong> ₱{Number(selectedItem.price).toFixed(2)}</p>
-                <p><strong>Stock:</strong> {selectedItem.quantity}</p>
-                <div className="action-buttons"><button className="btn-cancel" onClick={() => setSelectedItem(null)}>Close</button></div>
+                <p><strong>Stock Available:</strong> {selectedItem.quantity}</p>
+
+                <hr style={{ borderColor: '#37474f', margin: '15px 0' }} />
+                <h4>Process Sale</h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                  <label>Quantity to Buy:</label>
+                  <input type="number" min="1" max={selectedItem.quantity} value={purchaseQty} onChange={(e) => setPurchaseQty(Number(e.target.value))} style={{ width: '70px', textAlign: 'center' }} />
+                </div>
+
+                <div className="action-buttons">
+                  <button className="btn-save" style={{ backgroundColor: '#2e7d32' }} onClick={handleCustomerPurchase}>Purchase Item</button>
+                  <button className="btn-cancel" onClick={() => setSelectedItem(null)}>Close</button>
+                </div>
+              </div>
+            ) : (
+              // WAREHOUSE VIEW ONLY
+              <div>
+                <p><strong>Brand:</strong> {selectedItem.brand}</p>
+                <p><strong>Item Code:</strong> {selectedItem.item_code}</p>
+                <p><strong>Category:</strong> {selectedItem.category}</p>
+                <p><strong>Price:</strong> ₱{Number(selectedItem.price).toFixed(2)}</p>
+                <p><strong>Stock Available:</strong> {selectedItem.quantity}</p>
+
+                <div className="action-buttons" style={{ marginTop: '20px' }}>
+                  <button className="btn-cancel" onClick={() => setSelectedItem(null)}>Close</button>
+                </div>
               </div>
             )}
           </div>
