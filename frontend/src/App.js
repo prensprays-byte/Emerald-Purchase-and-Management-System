@@ -3,15 +3,14 @@ import axios from 'axios';
 import './App.css';
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('emerald_logged_in') === 'true');
-  const [userRole, setUserRole] = useState(() => localStorage.getItem('emerald_user_role') || '');
-  const [username, setUsername] = useState(() => localStorage.getItem('emerald_username') || '');
+  const [isLoggedIn, setIsLoggedIn] = useState(() => sessionStorage.getItem('emerald_logged_in') === 'true');
+  const [userRole, setUserRole] = useState(() => sessionStorage.getItem('emerald_user_role') || '');
+  const [username, setUsername] = useState(() => sessionStorage.getItem('emerald_username') || '');
   const [activeTab, setActiveTab] = useState('home');
 
   const [notiFilter, setNotiFilter] = useState('all');
 
   const [isRegistering, setIsRegistering] = useState(false);
-  const [registerRole, setRegisterRole] = useState('staff');
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -21,6 +20,7 @@ function App() {
   const [orders, setOrders] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [incidents, setIncidents] = useState([]);
+  const [systemUsers, setSystemUsers] = useState([]);
   const [search, setSearch] = useState('');
 
   const [selectedMainCategory, setSelectedMainCategory] = useState('All');
@@ -31,17 +31,14 @@ function App() {
 
   const categoriesList = ['Furniture', 'Storage and Organizer', 'Appliance'];
 
+  // Added separate states for size value and unit dropdown
   const [productForm, setProductForm] = useState({
     name: '',
     category: 'Furniture',
     item_code: '',
     brand: '',
-    size: '',
-    design: '',
-    surface: '',
-    texture: '',
-    class_type: 'A',
-    special_specs: '',
+    size_value: '',
+    size_unit: 'cm',
     quantity: '',
     price: ''
   });
@@ -49,6 +46,8 @@ function App() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [purchaseQty, setPurchaseQty] = useState(1);
   const [editFormData, setEditFormData] = useState({});
+  const [editSizeValue, setEditSizeValue] = useState('');
+  const [editSizeUnit, setEditSizeUnit] = useState('cm');
 
   const fetchAppliances = useCallback(async () => {
     try {
@@ -59,7 +58,7 @@ function App() {
       if (params.toString()) url += `?${params.toString()}`;
 
       const response = await axios.get(url);
-      setAppliances(response.data.map(item => ({ ...item, max_stock: item.max_stock || item.quantity || 100 })));
+      setAppliances(response.data.map(item => ({ ...item, max_stock: item.max_stock || 100 })));
     } catch (error) {
       console.error('Error fetching inventory:', error);
     }
@@ -92,14 +91,26 @@ function App() {
     }
   }, []);
 
+  const fetchUsers = useCallback(async () => {
+    try {
+      const response = await axios.get('http://localhost:5000/api/users');
+      setSystemUsers(response.data);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  }, []);
+
   useEffect(() => {
     if (isLoggedIn) {
       fetchAppliances();
       fetchOrders();
       fetchPurchases();
       fetchIncidents();
+      if (userRole === 'admin') {
+        fetchUsers();
+      }
     }
-  }, [isLoggedIn, fetchAppliances, fetchOrders, fetchPurchases, fetchIncidents]);
+  }, [isLoggedIn, userRole, fetchAppliances, fetchOrders, fetchPurchases, fetchIncidents, fetchUsers]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -110,9 +121,13 @@ function App() {
         setIsLoggedIn(true);
         setUserRole(user.role);
         setUsername(user.username);
-        localStorage.setItem('emerald_logged_in', 'true');
-        localStorage.setItem('emerald_user_role', user.role);
-        localStorage.setItem('emerald_username', user.username);
+        
+        sessionStorage.setItem('emerald_logged_in', 'true');
+        sessionStorage.setItem('emerald_user_role', user.role);
+        sessionStorage.setItem('emerald_username', user.username);
+
+        setLoginUsername('');
+        setLoginPassword('');
         setLoginError('');
       }
     } catch (error) {
@@ -123,10 +138,11 @@ function App() {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5000/api/register', { username: loginUsername, password: loginPassword, role: registerRole });
-      setSuccessMessage('Registration successful! Please log in.');
+      await axios.post('http://localhost:5000/api/register', { username: loginUsername, password: loginPassword });
+      setSuccessMessage('Registration successful! You can now log in.');
       setIsRegistering(false);
       setLoginPassword('');
+      setLoginUsername('');
     } catch (error) {
       setLoginError(error.response?.data?.error || 'Registration failed');
     }
@@ -137,7 +153,7 @@ function App() {
     setUserRole('');
     setUsername('');
     setSelectedItem(null);
-    localStorage.clear();
+    sessionStorage.clear();
   };
 
   const openAddModal = () => {
@@ -147,12 +163,8 @@ function App() {
       category: activeCat,
       item_code: '',
       brand: '',
-      size: '',
-      design: '',
-      surface: '',
-      texture: '',
-      class_type: 'A',
-      special_specs: '',
+      size_value: '',
+      size_unit: 'cm',
       quantity: '',
       price: ''
     });
@@ -161,9 +173,14 @@ function App() {
 
   const handleAddAppliance = async (e) => {
     e.preventDefault();
+    const formattedSize = productForm.size_value ? `${productForm.size_value} ${productForm.size_unit}` : '';
     try {
       await axios.post('http://localhost:5000/api/inventory', {
-        ...productForm,
+        name: productForm.name,
+        category: productForm.category,
+        item_code: productForm.item_code,
+        brand: productForm.brand,
+        size: formattedSize,
         quantity: Number(productForm.quantity),
         price: Number(productForm.price)
       });
@@ -198,6 +215,15 @@ function App() {
     setSelectedItem(item);
     setPurchaseQty(1);
     setEditFormData({ ...item });
+    
+    if (item.size) {
+      const parts = item.size.split(' ');
+      setEditSizeValue(parts[0] || '');
+      setEditSizeUnit(parts[1] || 'cm');
+    } else {
+      setEditSizeValue('');
+      setEditSizeUnit('cm');
+    }
   };
 
   const handleAdminRestockRequest = async () => {
@@ -266,7 +292,10 @@ function App() {
 
   const handleAdminSaveEdit = async () => {
     try {
-      await axios.put(`http://localhost:5000/api/inventory/${selectedItem.id}`, editFormData);
+      const formattedSize = editSizeValue ? `${editSizeValue} ${editSizeUnit}` : '';
+      const updatedPayload = { ...editFormData, size: formattedSize };
+
+      await axios.put(`http://localhost:5000/api/inventory/${selectedItem.id}`, updatedPayload);
       setSelectedItem(null);
       fetchAppliances();
       alert('Item updated successfully!');
@@ -280,6 +309,28 @@ function App() {
       await axios.delete(`http://localhost:5000/api/inventory/${id}`);
       setSelectedItem(null);
       fetchAppliances();
+    }
+  };
+
+  const handleUpdateUserRole = async (userId, newRole) => {
+    try {
+      await axios.put(`http://localhost:5000/api/users/${userId}/role`, { role: newRole });
+      fetchUsers();
+      alert('User role updated successfully!');
+    } catch (error) {
+      alert('Failed to update user role.');
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      try {
+        await axios.delete(`http://localhost:5000/api/users/${userId}`);
+        fetchUsers();
+        alert('User deleted successfully!');
+      } catch (error) {
+        alert('Failed to delete user.');
+      }
     }
   };
 
@@ -311,24 +362,24 @@ function App() {
       <div className="login-container">
         <form onSubmit={isRegistering ? handleRegister : handleLogin} className="login-card">
           <h2>Emerald System</h2>
-          <p>{isRegistering ? 'Create a new account' : 'Please log in'}</p>
+          <p>{isRegistering ? 'Create a new account (Default: Staff)' : 'Please log in'}</p>
           {loginError && <div className="error-message">{loginError}</div>}
           {successMessage && <div className="success-message">{successMessage}</div>}
-          <div className="form-group"><label>Username</label><input type="text" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} required /></div>
-          <div className="form-group"><label>Password</label><input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required /></div>
-          {isRegistering && (
-            <div className="form-group">
-              <label>Role</label>
-              <select value={registerRole} onChange={(e) => setRegisterRole(e.target.value)} className="dropdown-input">
-                <option value="staff">Staff</option>
-                <option value="admin">Admin</option>
-                <option value="warehouse">Warehouse</option>
-              </select>
-            </div>
-          )}
+          
+          <div className="form-group">
+            <label>Username</label>
+            <input type="text" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} required />
+          </div>
+
+          <div className="form-group">
+            <label>Password</label>
+            <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
+          </div>
+
           <button type="submit" className="btn-login">{isRegistering ? 'Register' : 'Log In'}</button>
+          
           <div style={{ textAlign: 'center', marginTop: '15px' }}>
-            <button type="button" className="toggle-link-btn" onClick={() => setIsRegistering(!isRegistering)}>
+            <button type="button" className="toggle-link-btn" onClick={() => { setIsRegistering(!isRegistering); setLoginError(''); setSuccessMessage(''); }}>
               {isRegistering ? 'Already have an account? Log in' : "Don't have an account? Register"}
             </button>
           </div>
@@ -344,7 +395,8 @@ function App() {
           <h1>Emerald Purchase and Management System</h1>
           <small style={{ color: '#81c784' }}>Logged in as: <strong>{userRole.toUpperCase()}</strong> ({username})</small>
         </div>
-        <div className="top-right-nav">
+
+        <div className="top-right-nav" style={{ border: 'none', background: 'transparent', boxShadow: 'none', padding: 0 }}>
           <button className={`nav-btn ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>Home</button>
           <button className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
           
@@ -353,10 +405,16 @@ function App() {
               Notification {totalNotificationBadge > 0 && <span className="badge">{totalNotificationBadge}</span>}
             </button>
           )}
-          {userRole === 'staff' && (
+
+          {/* PURCHASE HISTORY / SYSTEM HISTORY TRACKER VISIBLE TO ADMIN & STAFF */}
+          {(userRole === 'staff' || userRole === 'admin') && (
             <button className={`nav-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
               Purchase History {purchases.length > 0 && <span className="badge">{purchases.length}</span>}
             </button>
+          )}
+
+          {userRole === 'admin' && (
+            <button className={`nav-btn ${activeTab === 'roles' ? 'active' : ''}`} onClick={() => setActiveTab('roles')}>Role Management</button>
           )}
 
           {userRole !== 'staff' && userRole !== 'warehouse' && (
@@ -369,8 +427,11 @@ function App() {
 
       {activeTab === 'home' && (
         <div className="tab-content">
-          <div className="category-selection-container">
-            <div className="main-category-banner">SELECT MAIN CATEGORY</div>
+          <div style={{ margin: '15px 0' }}>
+            <div className="main-category-banner" style={{ textAlign: 'center', padding: '10px', fontWeight: 'bold', color: '#81c784', background: '#101612', borderRadius: '6px', marginBottom: '15px' }}>
+              SELECT MAIN CATEGORY
+            </div>
+
             <div className="category-grid">
               <div 
                 className={`category-card ${selectedMainCategory === 'All' ? 'active' : ''}`} 
@@ -407,24 +468,16 @@ function App() {
           <div className="product-grid">
             {filteredAppliances.length > 0 ? (
               filteredAppliances.map((item) => {
-                const isLowStock = item.quantity <= (item.max_stock || item.quantity) * 0.5;
+                const isLowStock = item.quantity <= 50 || item.quantity <= (item.max_stock || 100) * 0.5;
                 return (
-                  <div key={item.id} className="product-card" onClick={() => openCardModal(item)}>
-                    <div style={{ position: 'relative' }}>
-                      <img src="https://via.placeholder.com/200?text=No+Image" alt={item.name} className="product-image" />
-                      {isLowStock && <span className="low-stock-badge" title="Low Stock (&le; 50%)!">!</span>}
-                    </div>
-                    <div className="product-name">{item.name}</div>
+                  <div key={item.id} className="product-card" onClick={() => openCardModal(item)} style={{ position: 'relative' }}>
+                    {isLowStock && <span className="low-stock-badge" title="Low Stock (&le; 50 or 50%!)">!</span>}
+                    <div className="product-name" style={{ marginTop: '5px' }}>{item.name}</div>
                     
                     <div className="product-specs-list">
-                      {item.item_code && <div className="spec-row"><span className="spec-label">Item Code:</span> <span className="spec-val">{item.item_code}</span></div>}
                       {item.brand && <div className="spec-row"><span className="spec-label">Brand:</span> <span className="spec-val">{item.brand}</span></div>}
                       {item.size && <div className="spec-row"><span className="spec-label">Size:</span> <span className="spec-val">{item.size}</span></div>}
-                      {item.design && <div className="spec-row"><span className="spec-label">Design:</span> <span className="spec-val">{item.design}</span></div>}
-                      {item.surface && <div className="spec-row"><span className="spec-label">Surface:</span> <span className="spec-val">{item.surface}</span></div>}
-                      {item.texture && <div className="spec-row"><span className="spec-label">Texture:</span> <span className="spec-val">{item.texture}</span></div>}
                       {item.class && <div className="spec-row"><span className="spec-label">Class:</span> <span className="spec-val">{item.class}</span></div>}
-                      {item.special_specs && <div className="spec-row"><span className="spec-label">Special Specs:</span> <span className="spec-val">{item.special_specs}</span></div>}
                     </div>
 
                     <div className="product-price">₱{Number(item.price).toFixed(2)}</div>
@@ -485,8 +538,69 @@ function App() {
         </div>
       )}
 
-      {/* PURCHASE HISTORY TABLE FOR STAFF */}
-      {activeTab === 'history' && userRole === 'staff' && (
+      {/* Role Management Tab */}
+      {activeTab === 'roles' && userRole === 'admin' && (
+        <div className="tab-content" style={{ paddingBottom: '20px' }}>
+          <div className="notification-section" style={{ padding: '20px', background: '#101612', borderRadius: '8px' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ffffff', marginBottom: '20px' }}>
+              👥 User Role Management
+            </h3>
+            {systemUsers.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', background: '#101612', color: '#e0e0e0' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #1a261c', color: '#81c784', fontSize: '0.95rem' }}>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>ID</th>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>Username</th>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>Current Role</th>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>Change Role</th>
+                      <th style={{ padding: '12px 16px', fontWeight: '600' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {systemUsers.map((u) => (
+                      <tr key={u.id} style={{ borderBottom: '1px solid #162018' }}>
+                        <td style={{ padding: '12px 16px', color: '#b0bec5' }}>#{u.id}</td>
+                        <td style={{ padding: '12px 16px', fontWeight: 'bold', color: '#ffffff' }}>{u.username}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', background: u.role === 'admin' ? '#1b5e20' : u.role === 'warehouse' ? '#ff8f00' : '#1976d2', color: '#ffffff', textTransform: 'uppercase' }}>
+                            {u.role}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <select 
+                            value={u.role} 
+                            onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
+                            className="dropdown-input"
+                            style={{ padding: '6px', fontSize: '0.9rem', width: '130px' }}
+                          >
+                            <option value="admin">Admin</option>
+                            <option value="warehouse">Warehouse</option>
+                            <option value="staff">Staff</option>
+                          </select>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <button 
+                            onClick={() => handleDeleteUser(u.id)}
+                            style={{ backgroundColor: '#d32f2f', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+                          >
+                            Delete User
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="no-notifications">No users found.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* PURCHASE HISTORY / SYSTEM HISTORY TRACKER TABLE FOR ADMIN & STAFF */}
+      {activeTab === 'history' && (userRole === 'staff' || userRole === 'admin') && (
         <div className="tab-content" style={{ paddingBottom: '20px' }}>
           <div className="notification-section" style={{ padding: '20px', background: '#101612', borderRadius: '8px' }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ffffff', marginBottom: '20px' }}>
@@ -739,19 +853,47 @@ function App() {
             <h2>Add New Product</h2>
             <form onSubmit={handleAddAppliance}>
               <div className="modal-inputs">
-                <label>Product Name</label><input type="text" value={productForm.name} onChange={(e) => setProductForm({...productForm, name: e.target.value})} required />
-                <label>Category</label><select value={productForm.category} onChange={(e) => setProductForm({...productForm, category: e.target.value})} className="dropdown-input">{categoriesList.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                <label>Item Code</label><input type="text" value={productForm.item_code} onChange={(e) => setProductForm({...productForm, item_code: e.target.value})} />
-                <label>Brand</label><input type="text" value={productForm.brand} onChange={(e) => setProductForm({...productForm, brand: e.target.value})} />
-                <label>Size</label><input type="text" value={productForm.size} onChange={(e) => setProductForm({...productForm, size: e.target.value})} />
-                <label>Design</label><input type="text" value={productForm.design} onChange={(e) => setProductForm({...productForm, design: e.target.value})} />
-                <label>Surface</label><input type="text" value={productForm.surface} onChange={(e) => setProductForm({...productForm, surface: e.target.value})} />
-                <label>Texture</label><input type="text" value={productForm.texture} onChange={(e) => setProductForm({...productForm, texture: e.target.value})} />
-                <label>Class</label><input type="text" value={productForm.class_type} onChange={(e) => setProductForm({...productForm, class_type: e.target.value})} />
-                <label>Special Specs</label><input type="text" value={productForm.special_specs} onChange={(e) => setProductForm({...productForm, special_specs: e.target.value})} />
-                <label>Quantity</label><input type="number" value={productForm.quantity} onChange={(e) => setProductForm({...productForm, quantity: e.target.value})} required />
-                <label>Price (₱)</label><input type="number" step="0.01" value={productForm.price} onChange={(e) => setProductForm({...productForm, price: e.target.value})} required />
+                <label>Product Name</label>
+                <input type="text" value={productForm.name} onChange={(e) => setProductForm({...productForm, name: e.target.value})} required />
+                
+                <label>Category</label>
+                <select value={productForm.category} onChange={(e) => setProductForm({...productForm, category: e.target.value})} className="dropdown-input">
+                  {categoriesList.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                
+                <label>Item Code</label>
+                <input type="text" value={productForm.item_code} onChange={(e) => setProductForm({...productForm, item_code: e.target.value})} />
+                
+                <label>Brand</label>
+                <input type="text" value={productForm.brand} onChange={(e) => setProductForm({...productForm, brand: e.target.value})} />
+                
+                <label>Size</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. 40" 
+                    value={productForm.size_value} 
+                    onChange={(e) => setProductForm({...productForm, size_value: e.target.value})} 
+                    style={{ flex: '1' }}
+                  />
+                  <select 
+                    value={productForm.size_unit} 
+                    onChange={(e) => setProductForm({...productForm, size_unit: e.target.value})} 
+                    className="dropdown-input" 
+                    style={{ width: '100px' }}
+                  >
+                    <option value="cm">cm</option>
+                    <option value="inches">inches</option>
+                  </select>
+                </div>
+
+                <label>Quantity</label>
+                <input type="number" value={productForm.quantity} onChange={(e) => setProductForm({...productForm, quantity: e.target.value})} required />
+                
+                <label>Price (₱)</label>
+                <input type="number" step="0.01" value={productForm.price} onChange={(e) => setProductForm({...productForm, price: e.target.value})} required />
               </div>
+
               <div className="action-buttons" style={{ marginTop: '20px' }}>
                 <button type="submit" className="btn-add">Save Product</button>
                 <button type="button" className="btn-cancel" onClick={() => setShowAddModal(false)}>Cancel</button>
@@ -765,17 +907,49 @@ function App() {
         <div className="modal-overlay" onClick={() => setSelectedItem(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>{selectedItem.name}</h2>
-            <img src="https://via.placeholder.com/200?text=No+Image" alt={selectedItem.name} className="modal-image" />
 
             {userRole === 'admin' ? (
               <div className="modal-inputs">
                 <h4>Edit Item Information & Restock</h4>
-                <label>Name</label><input type="text" value={editFormData.name || ''} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} />
-                <label>Category</label><select value={editFormData.category || 'Furniture'} onChange={(e) => setEditFormData({...editFormData, category: e.target.value})} className="dropdown-input">{categoriesList.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                <label>Item Code</label><input type="text" value={editFormData.item_code || ''} onChange={(e) => setEditFormData({...editFormData, item_code: e.target.value})} />
-                <label>Brand</label><input type="text" value={editFormData.brand || ''} onChange={(e) => setEditFormData({...editFormData, brand: e.target.value})} />
-                <label>Quantity (Stock)</label><input type="number" value={editFormData.quantity || 0} onChange={(e) => setEditFormData({...editFormData, quantity: e.target.value})} />
-                <label>Price (₱)</label><input type="number" step="0.01" value={editFormData.price || 0} onChange={(e) => setEditFormData({...editFormData, price: e.target.value})} />
+                <label>Name</label>
+                <input type="text" value={editFormData.name || ''} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} />
+                
+                <label>Category</label>
+                <select value={editFormData.category || 'Furniture'} onChange={(e) => setEditFormData({...editFormData, category: e.target.value})} className="dropdown-input">
+                  {categoriesList.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                
+                <label>Item Code</label>
+                <input type="text" value={editFormData.item_code || ''} onChange={(e) => setEditFormData({...editFormData, item_code: e.target.value})} />
+                
+                <label>Brand</label>
+                <input type="text" value={editFormData.brand || ''} onChange={(e) => setEditFormData({...editFormData, brand: e.target.value})} />
+                
+                <label>Size</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. 40" 
+                    value={editSizeValue} 
+                    onChange={(e) => setEditSizeValue(e.target.value)} 
+                    style={{ flex: '1' }}
+                  />
+                  <select 
+                    value={editSizeUnit} 
+                    onChange={(e) => setEditSizeUnit(e.target.value)} 
+                    className="dropdown-input" 
+                    style={{ width: '100px' }}
+                  >
+                    <option value="cm">cm</option>
+                    <option value="inches">inches</option>
+                  </select>
+                </div>
+
+                <label>Quantity (Stock)</label>
+                <input type="number" value={editFormData.quantity || 0} onChange={(e) => setEditFormData({...editFormData, quantity: e.target.value})} />
+                
+                <label>Price (₱)</label>
+                <input type="number" step="0.01" value={editFormData.price || 0} onChange={(e) => setEditFormData({...editFormData, price: e.target.value})} />
 
                 <hr style={{ borderColor: '#37474f', margin: '15px 0' }} />
                 
@@ -797,6 +971,7 @@ function App() {
                 <p><strong>Brand:</strong> {selectedItem.brand}</p>
                 <p><strong>Item Code:</strong> {selectedItem.item_code}</p>
                 <p><strong>Category:</strong> {selectedItem.category}</p>
+                <p><strong>Size:</strong> {selectedItem.size || 'N/A'}</p>
                 <p><strong>Price:</strong> ₱{Number(selectedItem.price).toFixed(2)}</p>
                 <p><strong>Stock Available:</strong> {selectedItem.quantity}</p>
 
@@ -818,6 +993,7 @@ function App() {
                 <p><strong>Brand:</strong> {selectedItem.brand}</p>
                 <p><strong>Item Code:</strong> {selectedItem.item_code}</p>
                 <p><strong>Category:</strong> {selectedItem.category}</p>
+                <p><strong>Size:</strong> {selectedItem.size || 'N/A'}</p>
                 <p><strong>Price:</strong> ₱{Number(selectedItem.price).toFixed(2)}</p>
                 <p><strong>Stock Available:</strong> {selectedItem.quantity}</p>
 

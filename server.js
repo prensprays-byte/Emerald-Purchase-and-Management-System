@@ -27,25 +27,7 @@ db.getConnection((err, connection) => {
     return;
   }
   console.log('Successfully connected to MySQL database');
-
-
-
-  connection.query(createUsersTable, (userErr) => {
-    if (userErr) console.error('Error creating users table:', userErr);
-    connection.query(createAppliancesTable, (err) => {
-      if (err) console.error('Error creating appliances table:', err);
-      connection.query(createOrdersTable, (orderErr) => {
-        if (orderErr) console.error('Error creating orders table:', orderErr);
-        connection.query(createPurchasesTable, (purchErr) => {
-          if (purchErr) console.error('Error creating purchases table:', purchErr);
-          connection.query(createIncidentTable, (incErr) => {
-            if (incErr) console.error('Error creating incident table:', incErr);
-            connection.release();
-          });
-        });
-      });
-    });
-  });
+  connection.release();
 });
 
 app.get('/api/inventory', (req, res) => {
@@ -128,14 +110,41 @@ app.post('/api/login', (req, res) => {
   });
 });
 
+// Registration route with default role set to 'staff'
 app.post('/api/register', (req, res) => {
-  const { username, password, role } = req.body;
-  db.query('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', [username, password, role || 'staff'], (err) => {
+  const { username, password } = req.body;
+  const defaultRole = 'staff';
+  db.query('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', [username, password, defaultRole], (err) => {
     if (err) {
       if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Username already exists' });
       return res.status(500).json({ error: 'Database server error' });
     }
-    res.status(201).json({ message: 'User registered successfully' });
+    res.status(201).json({ message: 'User registered successfully as staff' });
+  });
+});
+
+// Role Management Endpoints
+app.get('/api/users', (req, res) => {
+  db.query('SELECT id, username, role FROM users', (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(results);
+  });
+});
+
+app.put('/api/users/:id/role', (req, res) => {
+  const { id } = req.params;
+  const { role } = req.body;
+  db.query('UPDATE users SET role = ? WHERE id = ?', [role, id], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'User role updated successfully' });
+  });
+});
+
+app.delete('/api/users/:id', (req, res) => {
+  const { id } = req.params;
+  db.query('DELETE FROM users WHERE id = ?', [id], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'User deleted successfully' });
   });
 });
 
@@ -179,7 +188,6 @@ app.post('/api/purchase', (req, res) => {
   });
 });
 
-// ALWAYS EXPLICITLY SET 'Pending Restock'
 app.post('/api/orders', (req, res) => {
   const { appliance_id, appliance_name, quantity, total_price, created_by } = req.body;
   const query = 'INSERT INTO orders (appliance_id, appliance_name, quantity, total_price, status, created_by) VALUES (?, ?, ?, ?, ?, ?)';
