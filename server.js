@@ -110,7 +110,6 @@ app.post('/api/login', (req, res) => {
   });
 });
 
-// Registration route with default role set to 'staff'
 app.post('/api/register', (req, res) => {
   const { username, password } = req.body;
   const defaultRole = 'staff';
@@ -123,7 +122,6 @@ app.post('/api/register', (req, res) => {
   });
 });
 
-// Role Management Endpoints
 app.get('/api/users', (req, res) => {
   db.query('SELECT id, username, role FROM users', (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -190,32 +188,48 @@ app.post('/api/purchase', (req, res) => {
 
 app.post('/api/orders', (req, res) => {
   const { appliance_id, appliance_name, quantity, total_price, created_by } = req.body;
-  const query = 'INSERT INTO orders (appliance_id, appliance_name, quantity, total_price, status, created_by) VALUES (?, ?, ?, ?, ?, ?)';
+  // Initialize received_quantity as 0 or NULL
+  const query = 'INSERT INTO orders (appliance_id, appliance_name, quantity, received_quantity, total_price, status, created_by) VALUES (?, ?, ?, 0, ?, ?, ?)';
   db.query(query, [appliance_id, appliance_name, quantity, total_price, 'Pending Restock', created_by || 'Admin'], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Restock request sent to warehouse successfully', orderId: result.insertId });
   });
 });
 
+// Update order status and store received_quantity separately
 app.put('/api/orders/:id/status', (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, received_quantity, actual_quantity } = req.body;
   
-  db.query('UPDATE orders SET status = ? WHERE id = ?', [status, id], (err) => {
+  // Accept either variable name sent from frontend
+  const finalReceivedQty = received_quantity !== undefined ? received_quantity : actual_quantity;
+
+  let updateQuery = 'UPDATE orders SET status = ?';
+  let queryParams = [status];
+
+  if (finalReceivedQty !== undefined) {
+    updateQuery += ', received_quantity = ?';
+    queryParams.push(finalReceivedQty);
+  }
+  
+  updateQuery += ' WHERE id = ?';
+  queryParams.push(id);
+
+  db.query(updateQuery, queryParams, (err) => {
     if (err) return res.status(500).json({ error: err.message });
 
     if (status === 'Received by Admin') {
-      db.query('SELECT appliance_id, quantity FROM orders WHERE id = ?', [id], (orderErr, orderResults) => {
+      const qtyToAdd = finalReceivedQty !== undefined ? Number(finalReceivedQty) : 0;
+      db.query('SELECT appliance_id FROM orders WHERE id = ?', [id], (orderErr, orderResults) => {
         if (!orderErr && orderResults.length > 0) {
-          const { appliance_id, quantity } = orderResults[0];
-          db.query('UPDATE appliances SET quantity = quantity + ? WHERE id = ?', [quantity, appliance_id]);
+          const { appliance_id } = orderResults[0];
+          db.query('UPDATE appliances SET quantity = quantity + ? WHERE id = ?', [qtyToAdd, appliance_id]);
         }
       });
     }
     res.json({ message: 'Order status updated successfully' });
   });
 });
-
 app.get('/api/incidents', (req, res) => {
   db.query('SELECT * FROM incident_reports ORDER BY created_at DESC', (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
