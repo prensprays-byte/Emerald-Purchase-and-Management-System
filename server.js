@@ -48,19 +48,19 @@ app.get('/api/inventory', (req, res) => {
 
 app.post('/api/inventory', (req, res) => {
   const { 
-    name, category, item_code, brand, size, design, surface, texture, class_type, class: classVal, special_specs, quantity, price 
+    name, category, brand, size, design, surface, texture, class_type, class: classVal, special_specs, quantity, price 
   } = req.body;
 
   const resolvedClass = class_type || classVal || '';
 
   const query = `
     INSERT INTO appliances 
-    (name, category, item_code, brand, size, design, surface, texture, class, special_specs, quantity, price) 
+    (name, category, brand, size, design, surface, texture, class, special_specs, quantity, price) 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.query(query, [
-    name, category || 'Furniture', item_code || '', brand || '', size || '', design || '', 
+    name, category || 'Furniture', brand || '', size || '', design || '', 
     surface || '', texture || '', resolvedClass, special_specs || '', quantity, price
   ], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -71,19 +71,19 @@ app.post('/api/inventory', (req, res) => {
 app.put('/api/inventory/:id', (req, res) => {
   const { id } = req.params;
   const { 
-    name, category, item_code, brand, size, design, surface, texture, class_type, class: classVal, special_specs, quantity, price 
+    name, category, brand, size, design, surface, texture, class_type, class: classVal, special_specs, quantity, price 
   } = req.body;
 
   const resolvedClass = class_type || classVal || '';
 
   const query = `
     UPDATE appliances SET 
-    name=?, category=?, item_code=?, brand=?, size=?, design=?, surface=?, texture=?, class=?, special_specs=?, quantity=?, price=? 
+    name=?, category=?, brand=?, size=?, design=?, surface=?, texture=?, class=?, special_specs=?, quantity=?, price=? 
     WHERE id=?
   `;
 
   db.query(query, [
-    name, category, item_code, brand, size, design, surface, texture, resolvedClass, special_specs, quantity, price, id
+    name, category, brand, size, design, surface, texture, resolvedClass, special_specs, quantity, price, id
   ], (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Item updated successfully' });
