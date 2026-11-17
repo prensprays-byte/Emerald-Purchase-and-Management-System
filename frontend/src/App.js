@@ -282,7 +282,10 @@ function App() {
     );
 
     try {
-      const response = await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, { status: targetStatus });
+      const response = await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, { 
+        status: targetStatus,
+        username: username || userRole 
+      });
       if (response.status === 200) {
         fetchOrders();
         fetchAppliances();
@@ -312,7 +315,8 @@ function App() {
     try {
       const response = await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, {
         status: 'Received by Admin',
-        received_quantity: actualQty
+        received_quantity: actualQty,
+        username: username || userRole
       });
       if (response.status === 200) {
         fetchOrders();
@@ -382,7 +386,17 @@ function App() {
 
   const pendingRestocks = orders.filter((order) => {
     const st = (order.status || '').toLowerCase();
-    return st !== 'received by admin';
+    return st === 'pending restock' || st === '';
+  });
+
+  const onProcessRestocks = orders.filter((order) => {
+    const st = (order.status || '').toLowerCase();
+    return st === 'restock received by warehouse';
+  });
+
+  const toShipRestocks = orders.filter((order) => {
+    const st = (order.status || '').toLowerCase();
+    return st === 'shipping';
   });
 
   const successfulRestocks = orders.filter((order) => {
@@ -391,7 +405,7 @@ function App() {
   });
 
   const openIncidents = incidents.filter((inc) => inc.status === 'Open');
-  const totalNotificationBadge = pendingRestocks.length + openIncidents.length;
+  const totalNotificationBadge = pendingRestocks.length + onProcessRestocks.length + toShipRestocks.length + openIncidents.length;
 
   if (!isLoggedIn) {
     return (
@@ -500,7 +514,7 @@ function App() {
       {/* MAIN CONTENT AREA */}
       <div className="main-content-area">
         <div className="page-header">
-          <h1>Emerald Inventory & Management</h1>
+          <h1>Emerald Inventory Purchasing & Management System</h1>
           <p>Welcome back, {username}!</p>
         </div>
 
@@ -578,12 +592,12 @@ function App() {
             <div className="dashboard-overview-card">
               <h3>Dashboard Overview</h3>
               <div className="services-grid">
-                <div className="service-card">
-                  <h4>📦 Total Products</h4>
-                  <p className="metric-value">{appliances.length}</p>
-                </div>
                 {userRole === 'admin' && (
                   <>
+                    <div className="service-card">
+                      <h4>📦 Total Products</h4>
+                      <p className="metric-value">{appliances.length}</p>
+                    </div>
                     <div className="service-card">
                       <h4>📋 Total Orders</h4>
                       <p className="metric-value">{orders.length}</p>
@@ -595,16 +609,30 @@ function App() {
                   </>
                 )}
                 {userRole === 'staff' && (
-                  <div className="service-card">
-                    <h4>🛒 Total Purchases Recorded</h4>
-                    <p className="metric-value">{purchases.length}</p>
-                  </div>
+                  <>
+                    <div className="service-card">
+                      <h4>📦 Total Products</h4>
+                      <p className="metric-value">{appliances.length}</p>
+                    </div>
+                    <div className="service-card">
+                      <h4>🛒 Total Purchases Recorded</h4>
+                      <p className="metric-value">{purchases.length}</p>
+                    </div>
+                  </>
                 )}
                 {userRole === 'warehouse' && (
                   <>
                     <div className="service-card">
-                      <h4>🚚 Pending Restocks</h4>
+                      <h4>⏳ Pending Restocks</h4>
                       <p className="metric-value metric-amber">{pendingRestocks.length}</p>
+                    </div>
+                    <div className="service-card">
+                      <h4>⚙️ On Process</h4>
+                      <p className="metric-value metric-amber">{onProcessRestocks.length}</p>
+                    </div>
+                    <div className="service-card">
+                      <h4>🚚 To Ship (In Transit)</h4>
+                      <p className="metric-value">{toShipRestocks.length}</p>
                     </div>
                     <div className="service-card">
                       <h4>✅ Successful Restocks</h4>
@@ -719,9 +747,9 @@ function App() {
           <div className="tab-content">
             <div className="notification-section">
               <div className="sub-chips-row">
-                <button className={`sub-chip ${notiFilter === 'all' ? 'active' : ''}`} onClick={() => setNotiFilter('all')}>All Notifications</button>
                 <button className={`sub-chip ${notiFilter === 'restocks' ? 'active' : ''}`} onClick={() => setNotiFilter('restocks')}>🚚 Restock Requests {pendingRestocks.length > 0 && `(${pendingRestocks.length})`}</button>
                 <button className={`sub-chip ${notiFilter === 'incidents' ? 'active' : ''}`} onClick={() => setNotiFilter('incidents')}>🚨 Incident Reports {openIncidents.length > 0 && `(${openIncidents.length})`}</button>
+                <button className={`sub-chip ${notiFilter === 'all' ? 'active' : ''}`} onClick={() => setNotiFilter('all')}>All Notifications</button>
               </div>
 
               {(notiFilter === 'all' || notiFilter === 'incidents') && (
@@ -778,20 +806,18 @@ function App() {
 
               {(notiFilter === 'all' || notiFilter === 'restocks') && (
                 <div className="table-container-card">
-                  <h3>🚚 Warehouse & Admin Restock Tracker</h3>
+                  <h3>🚚 Shipping Tracker</h3>
                   {orders.length > 0 ? (
                     <div className="table-responsive">
                       <table>
                         <thead>
                           <tr>
-                            <th>ID</th>
-                            <th>Date / Time</th>
-                            <th>Item Name</th>
-                            <th>Ordered Qty</th>
-                            <th>Received Qty</th>
+                            <th>ID & Date</th>
+                            <th>Item & Qty</th>
                             <th>Total Price</th>
+                            <th>Workflow Tracker</th>
                             <th>Shipping Process</th>
-                            <th>Action / Workflow</th>
+                            <th>Status</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -808,14 +834,23 @@ function App() {
 
                             return (
                               <tr key={order.id}>
-                                <td className="table-muted">#{order.id}</td>
-                                <td className="table-muted text-sm">{order.created_at ? new Date(order.created_at).toLocaleString() : 'N/A'}</td>
-                                <td className="table-bold">{order.appliance_name}</td>
-                                <td>{order.quantity}</td>
-                                <td className="table-emerald table-bold">
-                                  {isCompleted ? (order.received_quantity ?? order.quantity) : '—'}
+                                <td>
+                                  <span className="table-muted">#{order.id}</span>
+                                  <div className="table-muted text-sm">{order.created_at ? new Date(order.created_at).toLocaleString() : 'N/A'}</div>
+                                </td>
+                                <td>
+                                  <div className="table-bold">{order.appliance_name}</div>
+                                  <div className="text-sm table-muted">Ordered: {order.quantity} | Received: {isCompleted ? (order.received_quantity ?? order.quantity) : '—'}</div>
                                 </td>
                                 <td className="table-emerald">₱{Number(order.total_price).toFixed(2)}</td>
+                                <td>
+                                  {/* SIMPLIFIED 3-ROLE AUDIT TRAIL */}
+                                  <div className="text-sm" style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                    <span> <strong>Requested By:</strong> {order.created_by || 'Admin'}</span>
+                                    <span> <strong>Processed By:</strong> {order.received_by_wh || order.shipped_by || 'Pending'}</span>
+                                    <span> <strong>Received By:</strong> {order.received_by_admin_user || 'Pending'}</span>
+                                  </div>
+                                </td>
                                 <td>
                                   {/* STEP-BY-STEP VISUAL PROGRESS BAR */}
                                   <div className="progress-steps-container">
@@ -856,7 +891,7 @@ function App() {
                                           Shipping (Dispatch)
                                         </button>
                                       )}
-                                      {isShipping && <span className="wf-label-emerald">✈️ In Transit to Admin</span>}
+                                      {isShipping && <span className="wf-label-emerald"> 🚚 In Transit to Admin</span>}
                                       {isCompleted && <span className="wf-label-emerald">✅ Delivered</span>}
                                     </div>
                                   )}

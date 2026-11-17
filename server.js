@@ -188,7 +188,6 @@ app.post('/api/purchase', (req, res) => {
 
 app.post('/api/orders', (req, res) => {
   const { appliance_id, appliance_name, quantity, total_price, created_by } = req.body;
-  // Initialize received_quantity as 0 or NULL
   const query = 'INSERT INTO orders (appliance_id, appliance_name, quantity, received_quantity, total_price, status, created_by) VALUES (?, ?, ?, 0, ?, ?, ?)';
   db.query(query, [appliance_id, appliance_name, quantity, total_price, 'Pending Restock', created_by || 'Admin'], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -196,12 +195,11 @@ app.post('/api/orders', (req, res) => {
   });
 });
 
-// Update order status and store received_quantity separately
+// Update order status and track which user performed the step
 app.put('/api/orders/:id/status', (req, res) => {
   const { id } = req.params;
-  const { status, received_quantity, actual_quantity } = req.body;
+  const { status, received_quantity, actual_quantity, username } = req.body;
   
-  // Accept either variable name sent from frontend
   const finalReceivedQty = received_quantity !== undefined ? received_quantity : actual_quantity;
 
   let updateQuery = 'UPDATE orders SET status = ?';
@@ -210,6 +208,18 @@ app.put('/api/orders/:id/status', (req, res) => {
   if (finalReceivedQty !== undefined) {
     updateQuery += ', received_quantity = ?';
     queryParams.push(finalReceivedQty);
+  }
+
+  // Track who performed the action based on status
+  if (status === 'Restock Received by Warehouse' && username) {
+    updateQuery += ', received_by_wh = ?';
+    queryParams.push(username);
+  } else if (status === 'Shipping' && username) {
+    updateQuery += ', shipped_by = ?';
+    queryParams.push(username);
+  } else if (status === 'Received by Admin' && username) {
+    updateQuery += ', received_by_admin_user = ?';
+    queryParams.push(username);
   }
   
   updateQuery += ' WHERE id = ?';
@@ -230,6 +240,7 @@ app.put('/api/orders/:id/status', (req, res) => {
     res.json({ message: 'Order status updated successfully' });
   });
 });
+
 app.get('/api/incidents', (req, res) => {
   db.query('SELECT * FROM incident_reports ORDER BY created_at DESC', (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
