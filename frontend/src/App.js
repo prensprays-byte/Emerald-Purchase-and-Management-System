@@ -27,7 +27,7 @@ function App() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
-  
+
   const [incidentForm, setIncidentForm] = useState({ category: 'Furniture', product_name: '', description: '' });
 
   const categoriesList = ['Furniture', 'Storage and Organizer', 'Appliance'];
@@ -121,7 +121,7 @@ function App() {
         setIsLoggedIn(true);
         setUserRole(user.role);
         setUsername(user.username);
-        
+
         sessionStorage.setItem('emerald_logged_in', 'true');
         sessionStorage.setItem('emerald_user_role', user.role);
         sessionStorage.setItem('emerald_username', user.username);
@@ -219,7 +219,7 @@ function App() {
     setSelectedItem(item);
     setPurchaseQty(1);
     setEditFormData({ ...item });
-    
+
     if (item.size) {
       const parts = item.size.split(' ');
       setEditSizeValue(parts[0] || '');
@@ -282,9 +282,9 @@ function App() {
     );
 
     try {
-      const response = await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, { 
+      const response = await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, {
         status: targetStatus,
-        username: username || userRole 
+        username: username || userRole
       });
       if (response.status === 200) {
         fetchOrders();
@@ -302,16 +302,16 @@ function App() {
       e.preventDefault();
       e.stopPropagation();
     }
-  
+
     const inputVal = prompt(`Enter actual physical quantity received (Ordered: ${orderedQty}):`, orderedQty);
     if (inputVal === null) return;
-  
+
     const actualQty = Number(inputVal);
     if (isNaN(actualQty) || actualQty < 0) {
       alert('Please enter a valid quantity!');
       return;
     }
-  
+
     try {
       const response = await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, {
         status: 'Received by Admin',
@@ -376,7 +376,7 @@ function App() {
 
   const filteredAppliances = appliances.filter((item) => {
     const matchesMain = selectedMainCategory === 'All' || item.category === selectedMainCategory;
-    const matchesSearch = 
+    const matchesSearch =
       item.name.toLowerCase().includes(search.toLowerCase()) ||
       (item.item_code && item.item_code.toLowerCase().includes(search.toLowerCase())) ||
       (item.brand && item.brand.toLowerCase().includes(search.toLowerCase()));
@@ -407,15 +407,23 @@ function App() {
   const openIncidents = incidents.filter((inc) => inc.status === 'Open');
   const totalNotificationBadge = pendingRestocks.length + onProcessRestocks.length + toShipRestocks.length + openIncidents.length;
 
+  const globalBackgroundStyle = {
+    backgroundImage: `linear-gradient(rgba(11, 15, 12, 0.72), rgba(11, 15, 12, 0.82)), url(${process.env.PUBLIC_URL}/emerald-bg.png)`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundAttachment: 'fixed',
+    backgroundRepeat: 'no-repeat'
+  };
+
   if (!isLoggedIn) {
     return (
-      <div className="login-container">
+      <div className="login-container auth-background" style={globalBackgroundStyle}>
         <form onSubmit={isRegistering ? handleRegister : handleLogin} className="login-card">
           <h2>Emerald System</h2>
-          <p>{isRegistering ? 'Create a new account (Default: Staff)' : 'Please log in'}</p>
+          <p>{isRegistering ? 'Create a new account' : 'Please log in'}</p>
           {loginError && <div className="error-message">{loginError}</div>}
           {successMessage && <div className="success-message">{successMessage}</div>}
-          
+
           <div className="form-group">
             <label>Username</label>
             <input type="text" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} required />
@@ -427,7 +435,7 @@ function App() {
           </div>
 
           <button type="submit" className="btn-login">{isRegistering ? 'Register' : 'Log In'}</button>
-          
+
           <div className="login-toggle-wrapper">
             <button type="button" className="toggle-link-btn" onClick={() => { setIsRegistering(!isRegistering); setLoginError(''); setSuccessMessage(''); }}>
               {isRegistering ? 'Already have an account? Log in' : "Don't have an account? Register"}
@@ -439,8 +447,8 @@ function App() {
   }
 
   return (
-    <div className="app-layout">
-      
+    <div className="app-layout" style={globalBackgroundStyle}>
+
       {/* SIDEBAR NAVIGATION */}
       <div className="sidebar-container">
         <div>
@@ -450,22 +458,22 @@ function App() {
           </div>
 
           <div className="sidebar-nav-links">
-            <button 
+            <button
               onClick={() => setActiveTab('home')}
               className={`nav-link ${activeTab === 'home' ? 'active' : ''}`}
             >
               <span> Home</span>
             </button>
 
-            <button 
+            <button
               onClick={() => setActiveTab('dashboard')}
               className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`}
             >
               <span> Dashboard</span>
             </button>
-            
-            {(userRole === 'admin' || userRole === 'warehouse') && (
-              <button 
+
+            {(userRole === 'admin' || userRole === 'warehouse' || userRole === 'audit') && (
+              <button
                 onClick={() => setActiveTab('notifications')}
                 className={`nav-link ${activeTab === 'notifications' ? 'active' : ''}`}
               >
@@ -474,8 +482,8 @@ function App() {
               </button>
             )}
 
-            {(userRole === 'staff' || userRole === 'admin') && (
-              <button 
+            {(userRole === 'staff' || userRole === 'admin' || userRole === 'audit') && (
+              <button
                 onClick={() => setActiveTab('history')}
                 className={`nav-link ${activeTab === 'history' ? 'active' : ''}`}
               >
@@ -485,7 +493,7 @@ function App() {
             )}
 
             {userRole === 'admin' && (
-              <button 
+              <button
                 onClick={() => setActiveTab('roles')}
                 className={`nav-link ${activeTab === 'roles' ? 'active' : ''}`}
               >
@@ -493,8 +501,8 @@ function App() {
               </button>
             )}
 
-            {userRole !== 'staff' && userRole !== 'warehouse' && (
-              <button 
+            {userRole === 'admin' && (
+              <button
                 onClick={() => setActiveTab('services')}
                 className={`nav-link ${activeTab === 'services' ? 'active' : ''}`}
               >
@@ -526,17 +534,17 @@ function App() {
               </div>
 
               <div className="category-grid">
-                <div 
-                  className={`category-card ${selectedMainCategory === 'All' ? 'active' : ''}`} 
+                <div
+                  className={`category-card ${selectedMainCategory === 'All' ? 'active' : ''}`}
                   onClick={() => setSelectedMainCategory('All')}
                 >
                   <span className="cat-icon">📦</span>
                   <span>All Categories</span>
                 </div>
                 {categoriesList.map((mainCat) => (
-                  <div 
-                    key={mainCat} 
-                    className={`category-card ${selectedMainCategory === mainCat ? 'active' : ''}`} 
+                  <div
+                    key={mainCat}
+                    className={`category-card ${selectedMainCategory === mainCat ? 'active' : ''}`}
                     onClick={() => setSelectedMainCategory(mainCat)}
                   >
                     <span className="cat-icon">{mainCat === 'Furniture' ? '🛋️' : mainCat === 'Storage and Organizer' ? '📦' : '🔌'}</span>
@@ -548,7 +556,7 @@ function App() {
 
             <div className="toolbar-container">
               <input type="text" className="search-input" placeholder="Search product name, code, brand..." value={search} onChange={(e) => setSearch(e.target.value)} />
-              
+
               {userRole === 'admin' && (
                 <button className="btn-add" onClick={openAddModal}>
                   + Add New Product
@@ -557,7 +565,7 @@ function App() {
             </div>
 
             <h3 className="section-title">Product Catalog ({selectedMainCategory})</h3>
-            
+
             <div className="product-grid">
               {filteredAppliances.length > 0 ? (
                 filteredAppliances.map((item) => {
@@ -566,7 +574,7 @@ function App() {
                     <div key={item.id} className="product-card" onClick={() => openCardModal(item)}>
                       {isLowStock && <span className="low-stock-badge" title="Low Stock (&le; 50 or 50%!)">!</span>}
                       <div className="product-name">{item.name}</div>
-                      
+
                       <div className="product-specs-list">
                         {item.brand && <div className="spec-row"><span className="spec-label">Brand:</span> <span className="spec-val">{item.brand}</span></div>}
                         {item.size && <div className="spec-row"><span className="spec-label">Size:</span> <span className="spec-val">{item.size}</span></div>}
@@ -592,7 +600,7 @@ function App() {
             <div className="dashboard-overview-card">
               <h3>Dashboard Overview</h3>
               <div className="services-grid">
-                {userRole === 'admin' && (
+                {(userRole === 'admin' || userRole === 'audit') && (
                   <>
                     <div className="service-card">
                       <h4>📦 Total Products</h4>
@@ -601,6 +609,10 @@ function App() {
                     <div className="service-card">
                       <h4>📋 Total Orders</h4>
                       <p className="metric-value">{orders.length}</p>
+                    </div>
+                    <div className="service-card">
+                      <h4>🛒 Total Sales</h4>
+                      <p className="metric-value">{purchases.length}</p>
                     </div>
                     <div className="service-card">
                       <h4>⚠️ Open Incidents</h4>
@@ -673,18 +685,19 @@ function App() {
                             </span>
                           </td>
                           <td>
-                            <select 
-                              value={u.role} 
+                            <select
+                              value={u.role}
                               onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
                               className="dropdown-input role-select"
                             >
                               <option value="admin">Admin</option>
                               <option value="warehouse">Warehouse</option>
                               <option value="staff">Staff</option>
+                              <option value="audit">Audit</option>
                             </select>
                           </td>
                           <td>
-                            <button 
+                            <button
                               onClick={() => handleDeleteUser(u.id)}
                               className="btn-table-delete"
                             >
@@ -704,7 +717,7 @@ function App() {
         )}
 
         {/* PURCHASE HISTORY TABLE */}
-        {activeTab === 'history' && (userRole === 'staff' || userRole === 'admin') && (
+        {activeTab === 'history' && (userRole === 'staff' || userRole === 'admin' || userRole === 'audit') && (
           <div className="tab-content">
             <div className="table-container-card">
               <h3>🛒 Customer Purchase History</h3>
@@ -743,7 +756,7 @@ function App() {
         )}
 
         {/* NOTIFICATIONS TAB */}
-        {activeTab === 'notifications' && (userRole === 'admin' || userRole === 'warehouse') && (
+        {activeTab === 'notifications' && (userRole === 'admin' || userRole === 'warehouse' || userRole === 'audit') && (
           <div className="tab-content">
             <div className="notification-section">
               <div className="sub-chips-row">
@@ -760,7 +773,7 @@ function App() {
                       <button className="btn-add btn-crimson" onClick={() => setShowIncidentModal(true)}>+ File Incident Report</button>
                     )}
                   </div>
-                  
+
                   <div className="incident-list-container">
                     {incidents.length > 0 ? (
                       incidents.map((inc) => {
@@ -779,7 +792,7 @@ function App() {
                             </div>
                             <div>
                               {userRole === 'admin' && isOpen && (
-                                <button 
+                                <button
                                   onClick={async () => {
                                     try {
                                       await axios.put(`http://localhost:5000/api/incidents/${inc.id}/status`, { status: 'Resolved' });
@@ -854,7 +867,7 @@ function App() {
                                 <td>
                                   {/* STEP-BY-STEP VISUAL PROGRESS BAR */}
                                   <div className="progress-steps-container">
-                                    <div className={`p-step ${isPending || isReceivedByWarehouse || isShipping || isCompleted ? 'completed' : ''}`} title="Order Received">1</div>
+                                    <div className={`p-step ${isReceivedByWarehouse || isShipping || isCompleted ? 'completed' : ''}`} title="Order Received">1</div>
                                     <div className="p-line"></div>
                                     <div className={`p-step ${isReceivedByWarehouse || isShipping || isCompleted ? 'completed' : ''}`} title="Processing / Received by WH">2</div>
                                     <div className="p-line"></div>
@@ -863,7 +876,7 @@ function App() {
                                     <div className={`p-step ${isCompleted ? 'completed' : ''}`} title="Delivered / Received by Admin">4</div>
                                   </div>
                                   <div className="progress-label">
-                                    {isPending && 'Order Received'}
+                                    {isPending && 'Pending'}
                                     {isReceivedByWarehouse && 'Processing'}
                                     {isShipping && 'In Transit (Dispatch)'}
                                     {isCompleted && 'Delivered'}
@@ -874,7 +887,7 @@ function App() {
                                   {currentRole === 'warehouse' && (
                                     <div>
                                       {isPending && (
-                                        <button 
+                                        <button
                                           type="button"
                                           onClick={(e) => handleUpdateOrderStatus(e, order.id, 'Restock Received by Warehouse')}
                                           className="btn-wf-amber"
@@ -883,7 +896,7 @@ function App() {
                                         </button>
                                       )}
                                       {isReceivedByWarehouse && (
-                                        <button 
+                                        <button
                                           type="button"
                                           onClick={(e) => handleUpdateOrderStatus(e, order.id, 'Shipping')}
                                           className="btn-wf-emerald"
@@ -902,7 +915,7 @@ function App() {
                                       {isPending && <span className="wf-label-amber">⌛ Waiting for Warehouse</span>}
                                       {isReceivedByWarehouse && <span className="wf-label-emerald">📦 Processing by WH</span>}
                                       {isShipping && (
-                                        <button 
+                                        <button
                                           type="button"
                                           onClick={(e) => handleAdminReceiveShipping(e, order.id, order.quantity)}
                                           className="btn-wf-emerald"
@@ -910,6 +923,16 @@ function App() {
                                           Receive Shipping (Deliver)
                                         </button>
                                       )}
+                                      {isCompleted && <span className="wf-label-emerald">✅ Stock Delivered & Updated</span>}
+                                    </div>
+                                  )}
+
+                                  {/* AUDIT READ-ONLY STATUS VIEW */}
+                                  {currentRole === 'audit' && (
+                                    <div>
+                                      {isPending && <span className="wf-label-amber">⌛ Waiting for Warehouse</span>}
+                                      {isReceivedByWarehouse && <span className="wf-label-emerald">📦 Processing by WH</span>}
+                                      {isShipping && <span className="wf-label-emerald">🚚 In Transit to Admin</span>}
                                       {isCompleted && <span className="wf-label-emerald">✅ Stock Delivered & Updated</span>}
                                     </div>
                                   )}
@@ -929,7 +952,7 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'services' && userRole !== 'staff' && userRole !== 'warehouse' && (
+        {activeTab === 'services' && userRole === 'admin' && (
           <div className="tab-content">
             <div className="services-section">
               <h3>Emerald System Services</h3>
@@ -944,7 +967,7 @@ function App() {
                 </div>
                 <div className="service-card">
                   <h4 className="service-card-title">👥 User Roles & Access</h4>
-                  <p className="service-card-desc">Oversee admin, warehouse, and staff permissions securely.</p>
+                  <p className="service-card-desc">Oversee admin, warehouse, staff, and audit permissions securely.</p>
                 </div>
                 <div className="service-card">
                   <h4 className="service-card-title">🚨 System Incident Logs</h4>
@@ -962,26 +985,26 @@ function App() {
               <form onSubmit={handleAddIncident}>
                 <div className="modal-inputs">
                   <label>Category</label>
-                  <select 
-                    value={incidentForm.category} 
+                  <select
+                    value={incidentForm.category}
                     onChange={(e) => {
                       const newCat = e.target.value;
                       const firstItemOfCat = appliances.find(i => i.category === newCat);
                       setIncidentForm({
-                        ...incidentForm, 
-                        category: newCat, 
+                        ...incidentForm,
+                        category: newCat,
                         product_name: firstItemOfCat ? firstItemOfCat.name : ''
                       });
-                    }} 
+                    }}
                     className="dropdown-input"
                   >
                     {categoriesList.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
 
                   <label>Product Name</label>
-                  <select 
-                    value={incidentForm.product_name} 
-                    onChange={(e) => setIncidentForm({...incidentForm, product_name: e.target.value})} 
+                  <select
+                    value={incidentForm.product_name}
+                    onChange={(e) => setIncidentForm({ ...incidentForm, product_name: e.target.value })}
                     className="dropdown-input"
                     required
                   >
@@ -995,11 +1018,11 @@ function App() {
                   </select>
 
                   <label>Description (Damaged, Missing, etc.)</label>
-                  <textarea 
-                    rows="4" 
-                    value={incidentForm.description} 
-                    onChange={(e) => setIncidentForm({...incidentForm, description: e.target.value})} 
-                    required 
+                  <textarea
+                    rows="4"
+                    value={incidentForm.description}
+                    onChange={(e) => setIncidentForm({ ...incidentForm, description: e.target.value })}
+                    required
                   />
                 </div>
 
@@ -1019,27 +1042,27 @@ function App() {
               <form onSubmit={handleAddAppliance}>
                 <div className="modal-inputs">
                   <label>Product Name</label>
-                  <input type="text" value={productForm.name} onChange={(e) => setProductForm({...productForm, name: e.target.value})} required />
-                  
+                  <input type="text" value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} required />
+
                   <label>Category</label>
-                  <select value={productForm.category} onChange={(e) => setProductForm({...productForm, category: e.target.value})} className="dropdown-input">
+                  <select value={productForm.category} onChange={(e) => setProductForm({ ...productForm, category: e.target.value })} className="dropdown-input">
                     {categoriesList.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                  
+
                   <label>Brand</label>
-                  <input type="text" value={productForm.brand} onChange={(e) => setProductForm({...productForm, brand: e.target.value})} />
-                  
+                  <input type="text" value={productForm.brand} onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })} />
+
                   <label>Size</label>
                   <div className="size-inputs-row">
-                    <input 
-                      type="text" 
-                      placeholder="e.g. 40" 
-                      value={productForm.size_value} 
-                      onChange={(e) => setProductForm({...productForm, size_value: e.target.value})} 
+                    <input
+                      type="text"
+                      placeholder="e.g. 40"
+                      value={productForm.size_value}
+                      onChange={(e) => setProductForm({ ...productForm, size_value: e.target.value })}
                     />
-                    <select 
-                      value={productForm.size_unit} 
-                      onChange={(e) => setProductForm({...productForm, size_unit: e.target.value})} 
+                    <select
+                      value={productForm.size_unit}
+                      onChange={(e) => setProductForm({ ...productForm, size_unit: e.target.value })}
                       className="dropdown-input unit-select"
                     >
                       <option value="cm">cm</option>
@@ -1048,10 +1071,10 @@ function App() {
                   </div>
 
                   <label>Quantity</label>
-                  <input type="number" value={productForm.quantity} onChange={(e) => setProductForm({...productForm, quantity: e.target.value})} required />
-                  
+                  <input type="number" value={productForm.quantity} onChange={(e) => setProductForm({ ...productForm, quantity: e.target.value })} required />
+
                   <label>Price (₱)</label>
-                  <input type="number" step="0.01" value={productForm.price} onChange={(e) => setProductForm({...productForm, price: e.target.value})} required />
+                  <input type="number" step="0.01" value={productForm.price} onChange={(e) => setProductForm({ ...productForm, price: e.target.value })} required />
                 </div>
 
                 <div className="action-buttons">
@@ -1072,27 +1095,27 @@ function App() {
                 <div className="modal-inputs">
                   <h4>Edit Item Information & Restock</h4>
                   <label>Name</label>
-                  <input type="text" value={editFormData.name || ''} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} />
-                  
+                  <input type="text" value={editFormData.name || ''} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} />
+
                   <label>Category</label>
-                  <select value={editFormData.category || 'Furniture'} onChange={(e) => setEditFormData({...editFormData, category: e.target.value})} className="dropdown-input">
+                  <select value={editFormData.category || 'Furniture'} onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })} className="dropdown-input">
                     {categoriesList.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                  
+
                   <label>Brand</label>
-                  <input type="text" value={editFormData.brand || ''} onChange={(e) => setEditFormData({...editFormData, brand: e.target.value})} />
-                  
+                  <input type="text" value={editFormData.brand || ''} onChange={(e) => setEditFormData({ ...editFormData, brand: e.target.value })} />
+
                   <label>Size</label>
                   <div className="size-inputs-row">
-                    <input 
-                      type="text" 
-                      placeholder="e.g. 40" 
-                      value={editSizeValue} 
-                      onChange={(e) => setEditSizeValue(e.target.value)} 
+                    <input
+                      type="text"
+                      placeholder="e.g. 40"
+                      value={editSizeValue}
+                      onChange={(e) => setEditSizeValue(e.target.value)}
                     />
-                    <select 
-                      value={editSizeUnit} 
-                      onChange={(e) => setEditSizeUnit(e.target.value)} 
+                    <select
+                      value={editSizeUnit}
+                      onChange={(e) => setEditSizeUnit(e.target.value)}
                       className="dropdown-input unit-select"
                     >
                       <option value="cm">cm</option>
@@ -1101,13 +1124,13 @@ function App() {
                   </div>
 
                   <label>Quantity (Stock)</label>
-                  <input type="number" value={editFormData.quantity || 0} onChange={(e) => setEditFormData({...editFormData, quantity: e.target.value})} />
-                  
+                  <input type="number" value={editFormData.quantity || 0} onChange={(e) => setEditFormData({ ...editFormData, quantity: e.target.value })} />
+
                   <label>Price (₱)</label>
-                  <input type="number" step="0.01" value={editFormData.price || 0} onChange={(e) => setEditFormData({...editFormData, price: e.target.value})} />
+                  <input type="number" step="0.01" value={editFormData.price || 0} onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })} />
 
                   <hr className="modal-divider" />
-                  
+
                   <h4>Request Warehouse Restock</h4>
                   <div className="restock-input-row">
                     <label>Restock Quantity:</label>
@@ -1142,7 +1165,7 @@ function App() {
                   </div>
                 </div>
               ) : (
-                // WAREHOUSE VIEW ONLY
+                // WAREHOUSE & AUDIT VIEW ONLY
                 <div>
                   <p><strong>Brand:</strong> {selectedItem.brand}</p>
                   <p><strong>Category:</strong> {selectedItem.category}</p>

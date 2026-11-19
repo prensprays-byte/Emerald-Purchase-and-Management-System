@@ -3,10 +3,10 @@
 
 :root {
   --bg-dark: #0b0f0c;
-  --bg-sidebar: #101612;
-  --bg-card: #101612;
-  --bg-card-hover: #162018;
-  --bg-input: #0b120c;
+  --bg-sidebar: rgba(16, 22, 18, 0.9);
+  --bg-card: rgba(16, 22, 18, 0.88);
+  --bg-card-hover: rgba(22, 32, 24, 0.95);
+  --bg-input: rgba(11, 18, 12, 0.9);
 
   --primary-emerald: #81c784;
   --primary-emerald-dark: #1b5e20;
@@ -69,6 +69,7 @@ body {
   flex: 1;
   padding: 30px;
   overflow-y: auto;
+  background: transparent;
 }
 
 .page-header {
@@ -106,6 +107,7 @@ body {
   max-width: 400px;
   box-shadow: var(--shadow-main);
   border: 1px solid var(--emerald-border);
+  backdrop-filter: blur(6px);
 }
 
 .login-card h2 {
@@ -185,7 +187,7 @@ body {
   text-align: center;
 }
 
-/* SIDEBAR NAVIGATION (Matching First Picture) */
+/* SIDEBAR NAVIGATION */
 .sidebar-container {
   width: 260px;
   background: var(--bg-sidebar);
@@ -200,6 +202,7 @@ body {
   overflow-y: auto;
   box-shadow: var(--shadow-main);
   z-index: 100;
+  backdrop-filter: blur(8px);
 }
 
 .sidebar-brand {
@@ -526,7 +529,7 @@ table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  background: var(--bg-card);
+  background: transparent;
   color: var(--text-main);
 }
 
@@ -577,6 +580,7 @@ tr:hover td {
 .role-admin { background: var(--primary-emerald-dark); }
 .role-warehouse { background: var(--accent-amber); }
 .role-staff { background: var(--accent-blue); }
+.role-audit { background-color: #7c3aed; color: #ffffff; }
 
 .role-select {
   padding: 6px;
@@ -951,4 +955,15 @@ tr:hover td {
   font-size: 0.75rem;
   color: var(--primary-emerald);
   font-weight: 500;
+}
+
+.auth-background {
+  min-height: 100vh;
+  width: 100%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
