@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 
@@ -7,6 +7,7 @@ function App() {
   const [userRole, setUserRole] = useState(() => sessionStorage.getItem('emerald_user_role') || '');
   const [username, setUsername] = useState(() => sessionStorage.getItem('emerald_username') || '');
   const [activeTab, setActiveTab] = useState('home');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const [notiFilter, setNotiFilter] = useState('all');
 
@@ -27,6 +28,10 @@ function App() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
+  const [showRestockConfirmModal, setShowRestockConfirmModal] = useState(false);
+  const [showSaleConfirmModal, setShowSaleConfirmModal] = useState(false);
+  const [isSubmittingRestock, setIsSubmittingRestock] = useState(false);
+  const [isSubmittingSale, setIsSubmittingSale] = useState(false);
 
   const [incidentForm, setIncidentForm] = useState({ category: 'Furniture', product_name: '', description: '' });
 
@@ -48,6 +53,8 @@ function App() {
   const [editFormData, setEditFormData] = useState({});
   const [editSizeValue, setEditSizeValue] = useState('');
   const [editSizeUnit, setEditSizeUnit] = useState('cm');
+
+  const syncChannelRef = useRef(null);
 
   const fetchAppliances = useCallback(async () => {
     try {
@@ -100,17 +107,59 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    if (isLoggedIn) {
-      fetchAppliances();
-      fetchOrders();
-      fetchPurchases();
-      fetchIncidents();
-      if (userRole === 'admin') {
-        fetchUsers();
-      }
+  const refreshAllData = useCallback(async () => {
+    await Promise.all([
+      fetchAppliances(),
+      fetchOrders(),
+      fetchPurchases(),
+      fetchIncidents()
+    ]);
+    if (userRole === 'admin' || userRole === 'audit') {
+      await fetchUsers();
     }
-  }, [isLoggedIn, userRole, fetchAppliances, fetchOrders, fetchPurchases, fetchIncidents, fetchUsers]);
+  }, [userRole, fetchAppliances, fetchOrders, fetchPurchases, fetchIncidents, fetchUsers]);
+
+  const notifyOtherTabs = (eventType) => {
+    if (syncChannelRef.current) {
+      syncChannelRef.current.postMessage({ type: eventType });
+    }
+  };
+
+  useEffect(() => {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const channel = new BroadcastChannel('emerald_system_sync');
+      syncChannelRef.current = channel;
+      channel.onmessage = () => {
+        if (isLoggedIn) {
+          refreshAllData();
+        }
+      };
+      return () => {
+        channel.close();
+        syncChannelRef.current = null;
+      };
+    }
+  }, [isLoggedIn, refreshAllData]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    refreshAllData();
+
+    const intervalId = setInterval(() => {
+      refreshAllData();
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [isLoggedIn, refreshAllData]);
+
+  const navigateToTab = (tabName) => {
+    setActiveTab(tabName);
+    setNotiFilter('all');
+    if (isLoggedIn) {
+      refreshAllData();
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -121,6 +170,8 @@ function App() {
         setIsLoggedIn(true);
         setUserRole(user.role);
         setUsername(user.username);
+        setActiveTab('home');
+        setNotiFilter('all');
 
         sessionStorage.setItem('emerald_logged_in', 'true');
         sessionStorage.setItem('emerald_user_role', user.role);
@@ -153,6 +204,10 @@ function App() {
     setUserRole('');
     setUsername('');
     setSelectedItem(null);
+    setShowRestockConfirmModal(false);
+    setShowSaleConfirmModal(false);
+    setActiveTab('home');
+    setNotiFilter('all');
     sessionStorage.clear();
   };
 
@@ -185,7 +240,8 @@ function App() {
         price: Number(productForm.price)
       });
       setShowAddModal(false);
-      fetchAppliances();
+      await fetchAppliances();
+      notifyOtherTabs('inventory_updated');
       alert('Product added successfully!');
     } catch (error) {
       console.error('Error adding product:', error);
@@ -207,7 +263,8 @@ function App() {
       });
       setShowIncidentModal(false);
       setIncidentForm({ category: 'Furniture', product_name: '', description: '' });
-      fetchIncidents();
+      await fetchIncidents();
+      notifyOtherTabs('incidents_updated');
       alert('Incident report submitted to warehouse successfully!');
     } catch (error) {
       console.error('Error submitting incident:', error);
@@ -217,6 +274,8 @@ function App() {
 
   const openCardModal = (item) => {
     setSelectedItem(item);
+    setShowRestockConfirmModal(false);
+    setShowSaleConfirmModal(false);
     setPurchaseQty(1);
     setEditFormData({ ...item });
 
@@ -230,42 +289,81 @@ function App() {
     }
   };
 
-  const handleAdminRestockRequest = async () => {
-    if (purchaseQty <= 0) return alert('Please enter a valid restock quantity!');
-    const totalPrice = purchaseQty * selectedItem.price;
+  // Step 1: Open second verification confirmation popup
+  const handleOpenRestockVerification = () => {
+    if (!purchaseQty || Number(purchaseQty) <= 0) {
+      alert('Please enter a valid restock quantity!');
+      return;
+    }
+    setShowRestockConfirmModal(true);
+  };
+
+  // Step 2: Execute API request after second verification
+  const handleConfirmRestockRequest = async () => {
+    const qtyNum = Number(purchaseQty);
+    if (!selectedItem || qtyNum <= 0) return;
+    setIsSubmittingRestock(true);
+    const totalPrice = qtyNum * Number(selectedItem.price);
 
     try {
       await axios.post('http://localhost:5000/api/orders', {
         appliance_id: selectedItem.id,
         appliance_name: selectedItem.name,
-        quantity: purchaseQty,
+        quantity: qtyNum,
         total_price: totalPrice,
         created_by: username || userRole
       });
+      setShowRestockConfirmModal(false);
       setSelectedItem(null);
-      fetchOrders();
-      alert('Restock request sent to warehouse successfully!');
+      await fetchOrders();
+      notifyOtherTabs('orders_updated');
+      alert(`Restock request for ${qtyNum}x ${selectedItem.name} sent to warehouse successfully!`);
     } catch (error) {
       alert('Failed to send restock request.');
+    } finally {
+      setIsSubmittingRestock(false);
     }
   };
 
-  const handleCustomerPurchase = async () => {
-    if (purchaseQty <= 0) return alert('Please enter a valid quantity to buy!');
-    if (purchaseQty > selectedItem.quantity) return alert('Not enough stock available!');
+  // Step 1 (Staff): Open second verification popup for customer sale
+  const handleOpenSaleVerification = () => {
+    const qtyNum = Number(purchaseQty);
+    if (!qtyNum || qtyNum <= 0) {
+      alert('Please enter a valid quantity to buy!');
+      return;
+    }
+    if (!selectedItem || qtyNum > Number(selectedItem.quantity)) {
+      alert('Not enough stock available!');
+      return;
+    }
+    setShowSaleConfirmModal(true);
+  };
 
+  // Step 2 (Staff): Execute sale after second verification
+  const handleConfirmCustomerPurchase = async () => {
+    const qtyNum = Number(purchaseQty);
+    if (!selectedItem || qtyNum <= 0) return;
+    if (qtyNum > Number(selectedItem.quantity)) {
+      alert('Not enough stock available!');
+      return;
+    }
+
+    setIsSubmittingSale(true);
     try {
       await axios.post('http://localhost:5000/api/purchase', {
         appliance_id: selectedItem.id,
-        quantity: purchaseQty,
+        quantity: qtyNum,
         created_by: username || 'Staff'
       });
+      setShowSaleConfirmModal(false);
       setSelectedItem(null);
-      fetchAppliances();
-      fetchPurchases();
-      alert(`Successfully processed sale of ${purchaseQty}x ${selectedItem.name}! Recorded to history.`);
+      await Promise.all([fetchAppliances(), fetchPurchases()]);
+      notifyOtherTabs('purchases_updated');
+      alert(`Successfully processed sale of ${qtyNum}x ${selectedItem.name}! Recorded to history.`);
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to complete purchase.');
+    } finally {
+      setIsSubmittingSale(false);
     }
   };
 
@@ -275,20 +373,25 @@ function App() {
       e.stopPropagation();
     }
 
+    const actor = username || userRole;
     setOrders((prevOrders) =>
-      prevOrders.map((ord) =>
-        ord.id === orderId ? { ...ord, status: targetStatus } : ord
-      )
+      prevOrders.map((ord) => {
+        if (ord.id !== orderId) return ord;
+        const patch = { status: targetStatus };
+        if (targetStatus === 'Restock Received by Warehouse') patch.received_by_wh = actor;
+        if (targetStatus === 'Shipping') patch.shipped_by = actor;
+        return { ...ord, ...patch };
+      })
     );
 
     try {
       const response = await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, {
         status: targetStatus,
-        username: username || userRole
+        username: actor
       });
       if (response.status === 200) {
-        fetchOrders();
-        fetchAppliances();
+        await Promise.all([fetchOrders(), fetchAppliances()]);
+        notifyOtherTabs('orders_updated');
       }
     } catch (error) {
       console.error('Order status update error:', error);
@@ -319,8 +422,8 @@ function App() {
         username: username || userRole
       });
       if (response.status === 200) {
-        fetchOrders();
-        fetchAppliances();
+        await Promise.all([fetchOrders(), fetchAppliances()]);
+        notifyOtherTabs('orders_updated');
         alert(`Stock verified and updated! Received: ${actualQty} unit(s).`);
       }
     } catch (error) {
@@ -337,7 +440,8 @@ function App() {
 
       await axios.put(`http://localhost:5000/api/inventory/${selectedItem.id}`, updatedPayload);
       setSelectedItem(null);
-      fetchAppliances();
+      await fetchAppliances();
+      notifyOtherTabs('inventory_updated');
       alert('Item updated successfully!');
     } catch (error) {
       alert('Failed to update item.');
@@ -348,14 +452,16 @@ function App() {
     if (window.confirm('Are you sure you want to delete this item?')) {
       await axios.delete(`http://localhost:5000/api/inventory/${id}`);
       setSelectedItem(null);
-      fetchAppliances();
+      await fetchAppliances();
+      notifyOtherTabs('inventory_updated');
     }
   };
 
   const handleUpdateUserRole = async (userId, newRole) => {
     try {
       await axios.put(`http://localhost:5000/api/users/${userId}/role`, { role: newRole });
-      fetchUsers();
+      await fetchUsers();
+      notifyOtherTabs('users_updated');
       alert('User role updated successfully!');
     } catch (error) {
       alert('Failed to update user role.');
@@ -366,7 +472,8 @@ function App() {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
         await axios.delete(`http://localhost:5000/api/users/${userId}`);
-        fetchUsers();
+        await fetchUsers();
+        notifyOtherTabs('users_updated');
         alert('User deleted successfully!');
       } catch (error) {
         alert('Failed to delete user.');
@@ -448,81 +555,150 @@ function App() {
 
   return (
     <div className="app-layout" style={globalBackgroundStyle}>
+      {/* Hide native up/down number arrows & style 3-line sidebar toggle */}
+      <style>{`
+        .no-spinner::-webkit-outer-spin-button,
+        .no-spinner::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .no-spinner {
+          -moz-appearance: textfield;
+          appearance: textfield;
+        }
+        .hamburger-toggle-btn {
+          width: 40px;
+          height: 38px;
+          border-radius: 8px;
+          border: 1px solid rgba(129, 199, 132, 0.35);
+          background-color: rgba(16, 28, 21, 0.92);
+          color: #81c784;
+          font-size: 20px;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: background-color 0.2s ease, border-color 0.2s ease;
+          flex-shrink: 0;
+        }
+        .hamburger-toggle-btn:hover {
+          background-color: rgba(129, 199, 132, 0.18);
+          border-color: #81c784;
+        }
+        .sidebar-header-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        .header-title-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+      `}</style>
 
       {/* SIDEBAR NAVIGATION */}
-      <div className="sidebar-container">
-        <div>
-          <h2 className="sidebar-brand">Emerald System</h2>
-          <div className="sidebar-user-badge">
-            Logged as: <strong>{userRole.toUpperCase()}</strong> ({username})
+      {isSidebarOpen && (
+        <div className="sidebar-container">
+          <div>
+            <div className="sidebar-header-top">
+              <h2 className="sidebar-brand" style={{ margin: 0 }}>Emerald System</h2>
+              <button
+                type="button"
+                className="hamburger-toggle-btn"
+                onClick={() => setIsSidebarOpen(false)}
+                title="Hide side menu"
+                aria-label="Hide side menu"
+              >
+                ☰
+              </button>
+            </div>
+            <div className="sidebar-user-badge">
+              Logged as: <strong>{userRole.toUpperCase()}</strong> ({username})
+            </div>
+
+            <div className="sidebar-nav-links">
+              <button
+                onClick={() => navigateToTab('home')}
+                className={`nav-link ${activeTab === 'home' ? 'active' : ''}`}
+              >
+                <span> Home</span>
+              </button>
+
+              <button
+                onClick={() => navigateToTab('dashboard')}
+                className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`}
+              >
+                <span> Dashboard</span>
+              </button>
+
+              {(userRole === 'admin' || userRole === 'warehouse' || userRole === 'audit') && (
+                <button
+                  onClick={() => navigateToTab('notifications')}
+                  className={`nav-link ${activeTab === 'notifications' ? 'active' : ''}`}
+                >
+                  <span> Notification</span>
+                  {totalNotificationBadge > 0 && <span className="badge badge-red">{totalNotificationBadge}</span>}
+                </button>
+              )}
+
+              {(userRole === 'staff' || userRole === 'admin' || userRole === 'audit') && (
+                <button
+                  onClick={() => navigateToTab('history')}
+                  className={`nav-link ${activeTab === 'history' ? 'active' : ''}`}
+                >
+                  <span> Purchase History</span>
+                  {purchases.length > 0 && <span className="badge badge-blue">{purchases.length}</span>}
+                </button>
+              )}
+
+              {(userRole === 'admin' || userRole === 'audit') && (
+                <button
+                  onClick={() => navigateToTab('roles')}
+                  className={`nav-link ${activeTab === 'roles' ? 'active' : ''}`}
+                >
+                  <span> Role Management</span>
+                </button>
+              )}
+
+              {userRole === 'admin' && (
+                <button
+                  onClick={() => navigateToTab('services')}
+                  className={`nav-link ${activeTab === 'services' ? 'active' : ''}`}
+                >
+                  <span> Services</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="sidebar-nav-links">
-            <button
-              onClick={() => setActiveTab('home')}
-              className={`nav-link ${activeTab === 'home' ? 'active' : ''}`}
-            >
-              <span> Home</span>
+          <div>
+            <button onClick={handleLogout} className="btn-logout">
+              Logout
             </button>
-
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`}
-            >
-              <span> Dashboard</span>
-            </button>
-
-            {(userRole === 'admin' || userRole === 'warehouse' || userRole === 'audit') && (
-              <button
-                onClick={() => setActiveTab('notifications')}
-                className={`nav-link ${activeTab === 'notifications' ? 'active' : ''}`}
-              >
-                <span> Notification</span>
-                {totalNotificationBadge > 0 && <span className="badge badge-red">{totalNotificationBadge}</span>}
-              </button>
-            )}
-
-            {(userRole === 'staff' || userRole === 'admin' || userRole === 'audit') && (
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`nav-link ${activeTab === 'history' ? 'active' : ''}`}
-              >
-                <span> Purchase History</span>
-                {purchases.length > 0 && <span className="badge badge-blue">{purchases.length}</span>}
-              </button>
-            )}
-
-            {userRole === 'admin' && (
-              <button
-                onClick={() => setActiveTab('roles')}
-                className={`nav-link ${activeTab === 'roles' ? 'active' : ''}`}
-              >
-                <span> Role Management</span>
-              </button>
-            )}
-
-            {userRole === 'admin' && (
-              <button
-                onClick={() => setActiveTab('services')}
-                className={`nav-link ${activeTab === 'services' ? 'active' : ''}`}
-              >
-                <span> Services</span>
-              </button>
-            )}
           </div>
         </div>
-
-        <div>
-          <button onClick={handleLogout} className="btn-logout">
-            Logout
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* MAIN CONTENT AREA */}
       <div className="main-content-area">
         <div className="page-header">
-          <h1>Emerald Inventory Purchasing & Management System</h1>
+          <div className="header-title-row">
+            {!isSidebarOpen && (
+              <button
+                type="button"
+                className="hamburger-toggle-btn"
+                onClick={() => setIsSidebarOpen(true)}
+                title="Show side menu"
+                aria-label="Show side menu"
+              >
+                ☰
+              </button>
+            )}
+            <h1 style={{ margin: 0 }}>Emerald Mini Depot Purchase and Management System</h1>
+          </div>
           <p>Welcome back, {username}!</p>
         </div>
 
@@ -572,7 +748,7 @@ function App() {
                   const isLowStock = item.quantity <= 50 || item.quantity <= (item.max_stock || 100) * 0.5;
                   return (
                     <div key={item.id} className="product-card" onClick={() => openCardModal(item)}>
-                      {isLowStock && <span className="low-stock-badge" title="Low Stock (&le; 50 or 50%!)">!</span>}
+                      {isLowStock && <span className="low-stock-badge" title="Low Stock (less than or equal to 50 or 50%)">!</span>}
                       <div className="product-name">{item.name}</div>
 
                       <div className="product-specs-list">
@@ -658,10 +834,10 @@ function App() {
         )}
 
         {/* Role Management Tab */}
-        {activeTab === 'roles' && userRole === 'admin' && (
+        {activeTab === 'roles' && (userRole === 'admin' || userRole === 'audit') && (
           <div className="tab-content">
             <div className="table-container-card">
-              <h3>👥 User Role Management</h3>
+              <h3>👥 User Role Management {userRole === 'audit'}</h3>
               {systemUsers.length > 0 ? (
                 <div className="table-responsive">
                   <table>
@@ -670,8 +846,8 @@ function App() {
                         <th>ID</th>
                         <th>Username</th>
                         <th>Current Role</th>
-                        <th>Change Role</th>
-                        <th>Actions</th>
+                        {userRole === 'admin' && <th>Change Role</th>}
+                        {userRole === 'admin' && <th>Actions</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -684,26 +860,30 @@ function App() {
                               {u.role}
                             </span>
                           </td>
-                          <td>
-                            <select
-                              value={u.role}
-                              onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
-                              className="dropdown-input role-select"
-                            >
-                              <option value="admin">Admin</option>
-                              <option value="warehouse">Warehouse</option>
-                              <option value="staff">Staff</option>
-                              <option value="audit">Audit</option>
-                            </select>
-                          </td>
-                          <td>
-                            <button
-                              onClick={() => handleDeleteUser(u.id)}
-                              className="btn-table-delete"
-                            >
-                              Delete User
-                            </button>
-                          </td>
+                          {userRole === 'admin' && (
+                            <td>
+                              <select
+                                value={u.role}
+                                onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
+                                className="dropdown-input role-select"
+                              >
+                                <option value="admin">Admin</option>
+                                <option value="warehouse">Warehouse</option>
+                                <option value="staff">Staff</option>
+                                <option value="audit">Audit</option>
+                              </select>
+                            </td>
+                          )}
+                          {userRole === 'admin' && (
+                            <td>
+                              <button
+                                onClick={() => handleDeleteUser(u.id)}
+                                className="btn-table-delete"
+                              >
+                                Delete User
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -760,9 +940,9 @@ function App() {
           <div className="tab-content">
             <div className="notification-section">
               <div className="sub-chips-row">
+                <button className={`sub-chip ${notiFilter === 'all' ? 'active' : ''}`} onClick={() => setNotiFilter('all')}>All Notifications</button>
                 <button className={`sub-chip ${notiFilter === 'restocks' ? 'active' : ''}`} onClick={() => setNotiFilter('restocks')}>🚚 Restock Requests {pendingRestocks.length > 0 && `(${pendingRestocks.length})`}</button>
                 <button className={`sub-chip ${notiFilter === 'incidents' ? 'active' : ''}`} onClick={() => setNotiFilter('incidents')}>🚨 Incident Reports {openIncidents.length > 0 && `(${openIncidents.length})`}</button>
-                <button className={`sub-chip ${notiFilter === 'all' ? 'active' : ''}`} onClick={() => setNotiFilter('all')}>All Notifications</button>
               </div>
 
               {(notiFilter === 'all' || notiFilter === 'incidents') && (
@@ -796,7 +976,8 @@ function App() {
                                   onClick={async () => {
                                     try {
                                       await axios.put(`http://localhost:5000/api/incidents/${inc.id}/status`, { status: 'Resolved' });
-                                      fetchIncidents();
+                                      await fetchIncidents();
+                                      notifyOtherTabs('incidents_updated');
                                     } catch (err) {
                                       alert('Failed to update status');
                                     }
@@ -828,7 +1009,7 @@ function App() {
                             <th>ID & Date</th>
                             <th>Item & Qty</th>
                             <th>Total Price</th>
-                            <th>Workflow Tracker</th>
+                            <th>Audit Trail</th>
                             <th>Shipping Process</th>
                             <th>Status</th>
                           </tr>
@@ -857,15 +1038,14 @@ function App() {
                                 </td>
                                 <td className="table-emerald">₱{Number(order.total_price).toFixed(2)}</td>
                                 <td>
-                                  {/* SIMPLIFIED 3-ROLE AUDIT TRAIL */}
                                   <div className="text-sm" style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                    <span> <strong>Requested By:</strong> {order.created_by || 'Admin'}</span>
-                                    <span> <strong>Processed By:</strong> {order.received_by_wh || order.shipped_by || 'Pending'}</span>
-                                    <span> <strong>Received By:</strong> {order.received_by_admin_user || 'Pending'}</span>
+                                    <span><strong>Requested By:</strong> {order.created_by || 'Admin'}</span>
+                                    <span><strong>Received by WH:</strong> {order.received_by_wh || 'Pending'}</span>
+                                    <span><strong>Shipped By:</strong> {order.shipped_by || 'Pending'}</span>
+                                    <span><strong>Received By:</strong> {order.received_by_admin_user || 'Pending'}</span>
                                   </div>
                                 </td>
                                 <td>
-                                  {/* STEP-BY-STEP VISUAL PROGRESS BAR */}
                                   <div className="progress-steps-container">
                                     <div className={`p-step ${isReceivedByWarehouse || isShipping || isCompleted ? 'completed' : ''}`} title="Order Received">1</div>
                                     <div className="p-line"></div>
@@ -883,7 +1063,6 @@ function App() {
                                   </div>
                                 </td>
                                 <td>
-                                  {/* WAREHOUSE WORKFLOW CONTROLS */}
                                   {currentRole === 'warehouse' && (
                                     <div>
                                       {isPending && (
@@ -909,7 +1088,6 @@ function App() {
                                     </div>
                                   )}
 
-                                  {/* ADMIN WORKFLOW CONTROLS WITH VERIFICATION PROMPT */}
                                   {currentRole === 'admin' && (
                                     <div>
                                       {isPending && <span className="wf-label-amber">⌛ Waiting for Warehouse</span>}
@@ -927,7 +1105,6 @@ function App() {
                                     </div>
                                   )}
 
-                                  {/* AUDIT READ-ONLY STATUS VIEW */}
                                   {currentRole === 'audit' && (
                                     <div>
                                       {isPending && <span className="wf-label-amber">⌛ Waiting for Warehouse</span>}
@@ -1087,13 +1264,13 @@ function App() {
         )}
 
         {selectedItem && (
-          <div className="modal-overlay" onClick={() => setSelectedItem(null)}>
+          <div className="modal-overlay" onClick={() => { setSelectedItem(null); setShowRestockConfirmModal(false); setShowSaleConfirmModal(false); }}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <h2>{selectedItem.name}</h2>
 
               {userRole === 'admin' ? (
                 <div className="modal-inputs">
-                  <h4>Edit Item Information & Restock</h4>
+                  <h4>Edit Item Information</h4>
                   <label>Name</label>
                   <input type="text" value={editFormData.name || ''} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} />
 
@@ -1129,16 +1306,119 @@ function App() {
                   <label>Price (₱)</label>
                   <input type="number" step="0.01" value={editFormData.price || 0} onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })} />
 
-                  <hr className="modal-divider" />
+                  {/* UPGRADED WAREHOUSE RESTOCK PANEL */}
+                  <div
+                    style={{
+                      marginTop: '18px',
+                      padding: '16px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(145deg, rgba(16, 28, 21, 0.95), rgba(11, 18, 14, 0.98))',
+                      border: '1px solid rgba(129, 199, 132, 0.35)',
+                      boxShadow: '0 6px 18px rgba(0, 0, 0, 0.35)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h4 style={{ margin: 0, color: '#81c784', fontSize: '15px', letterSpacing: '0.3px' }}>
+                        🚚 Request Warehouse Restock
+                      </h4>
+                      <span
+                        style={{
+                          fontSize: '12px',
+                          padding: '3px 8px',
+                          borderRadius: '999px',
+                          backgroundColor: 'rgba(129, 199, 132, 0.14)',
+                          color: '#a5d6a7',
+                          border: '1px solid rgba(129, 199, 132, 0.25)'
+                        }}
+                      >
+                        Current Stock: <strong>{selectedItem.quantity}</strong>
+                      </span>
+                    </div>
 
-                  <h4>Request Warehouse Restock</h4>
-                  <div className="restock-input-row">
-                    <label>Restock Quantity:</label>
-                    <input type="number" min="1" value={purchaseQty} onChange={(e) => setPurchaseQty(Number(e.target.value))} className="restock-qty-input" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                      <label style={{ margin: 0, fontSize: '13px', color: '#d1d5db' }}>Order Qty:</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={purchaseQty}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            setPurchaseQty('');
+                            return;
+                          }
+                          const parsed = Number(raw);
+                          if (!Number.isNaN(parsed)) {
+                            setPurchaseQty(parsed < 0 ? 0 : parsed);
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!purchaseQty || Number(purchaseQty) < 1) {
+                            setPurchaseQty(1);
+                          }
+                        }}
+                        className="restock-qty-input no-spinner"
+                        style={{ width: '90px', textAlign: 'center', fontWeight: '600' }}
+                      />
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {[10, 25, 50].map((inc) => (
+                          <button
+                            key={inc}
+                            type="button"
+                            onClick={() => setPurchaseQty((prev) => Number(prev || 0) + inc)}
+                            style={{
+                              padding: '5px 10px',
+                              fontSize: '12px',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(129, 199, 132, 0.35)',
+                              backgroundColor: 'rgba(129, 199, 132, 0.1)',
+                              color: '#81c784',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            +{inc}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '8px',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'rgba(0, 0, 0, 0.32)',
+                        marginBottom: '12px',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <div>
+                        <span style={{ color: '#9ca3af', display: 'block', fontSize: '11px' }}>Projected Stock</span>
+                        <strong style={{ color: '#81c784' }}>
+                          {Number(selectedItem.quantity) + Number(purchaseQty || 0)} units
+                        </strong>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ color: '#9ca3af', display: 'block', fontSize: '11px' }}>Estimated Total</span>
+                        <strong style={{ color: '#fbbf24' }}>
+                          ₱{(Number(purchaseQty || 0) * Number(selectedItem.price || 0)).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-save btn-amber"
+                      onClick={handleOpenRestockVerification}
+                      style={{ width: '100%', fontWeight: '600', padding: '10px' }}
+                    >
+                      Request Restock
+                    </button>
                   </div>
 
-                  <div className="action-buttons">
-                    <button className="btn-save btn-amber" onClick={handleAdminRestockRequest}>Restock</button>
+                  <div className="action-buttons" style={{ marginTop: '14px' }}>
                     <button className="btn-save btn-blue" onClick={handleAdminSaveEdit}>Save Changes</button>
                     <button className="btn-delete" onClick={() => handleDelete(selectedItem.id)}>Delete Item</button>
                     <button className="btn-cancel" onClick={() => setSelectedItem(null)}>Close</button>
@@ -1152,20 +1432,128 @@ function App() {
                   <p><strong>Price:</strong> ₱{Number(selectedItem.price).toFixed(2)}</p>
                   <p><strong>Stock Available:</strong> {selectedItem.quantity}</p>
 
-                  <hr className="modal-divider" />
-                  <h4>Process Sale</h4>
-                  <div className="restock-input-row">
-                    <label>Quantity to Buy:</label>
-                    <input type="number" min="1" max={selectedItem.quantity} value={purchaseQty} onChange={(e) => setPurchaseQty(Number(e.target.value))} className="restock-qty-input" />
+                  {/* UPGRADED STAFF PROCESS SALE PANEL */}
+                  <div
+                    style={{
+                      marginTop: '16px',
+                      padding: '16px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(145deg, rgba(16, 28, 21, 0.95), rgba(11, 18, 14, 0.98))',
+                      border: '1px solid rgba(129, 199, 132, 0.35)',
+                      boxShadow: '0 6px 18px rgba(0, 0, 0, 0.35)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h4 style={{ margin: 0, color: '#81c784', fontSize: '15px', letterSpacing: '0.3px' }}>
+                        🛒 Process Sale
+                      </h4>
+                      <span
+                        style={{
+                          fontSize: '12px',
+                          padding: '3px 8px',
+                          borderRadius: '999px',
+                          backgroundColor: 'rgba(129, 199, 132, 0.14)',
+                          color: '#a5d6a7',
+                          border: '1px solid rgba(129, 199, 132, 0.25)'
+                        }}
+                      >
+                        Available: <strong>{selectedItem.quantity}</strong>
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                      <label style={{ margin: 0, fontSize: '13px', color: '#d1d5db' }}>Quantity to Buy:</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={selectedItem.quantity}
+                        value={purchaseQty}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            setPurchaseQty('');
+                            return;
+                          }
+                          const parsed = Number(raw);
+                          if (!Number.isNaN(parsed)) {
+                            setPurchaseQty(parsed < 0 ? 0 : Math.min(parsed, Number(selectedItem.quantity)));
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!purchaseQty || Number(purchaseQty) < 1) {
+                            setPurchaseQty(1);
+                          }
+                        }}
+                        className="restock-qty-input no-spinner"
+                        style={{ width: '90px', textAlign: 'center', fontWeight: '600' }}
+                      />
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {[1, 5, 10].map((inc) => (
+                          <button
+                            key={inc}
+                            type="button"
+                            onClick={() =>
+                              setPurchaseQty((prev) =>
+                                Math.min(Number(selectedItem.quantity), Number(prev || 0) + inc)
+                              )
+                            }
+                            style={{
+                              padding: '5px 10px',
+                              fontSize: '12px',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(129, 199, 132, 0.35)',
+                              backgroundColor: 'rgba(129, 199, 132, 0.1)',
+                              color: '#81c784',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            +{inc}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '8px',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'rgba(0, 0, 0, 0.32)',
+                        marginBottom: '12px',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <div>
+                        <span style={{ color: '#9ca3af', display: 'block', fontSize: '11px' }}>Remaining Stock</span>
+                        <strong style={{ color: '#81c784' }}>
+                          {Math.max(0, Number(selectedItem.quantity) - Number(purchaseQty || 0))} units
+                        </strong>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ color: '#9ca3af', display: 'block', fontSize: '11px' }}>Total Sale</span>
+                        <strong style={{ color: '#fbbf24' }}>
+                          ₱{(Number(purchaseQty || 0) * Number(selectedItem.price || 0)).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-save btn-emerald-solid"
+                      onClick={handleOpenSaleVerification}
+                      style={{ width: '100%', fontWeight: '600', padding: '10px' }}
+                    >
+                      Purchase Item
+                    </button>
                   </div>
 
-                  <div className="action-buttons">
-                    <button className="btn-save btn-emerald-solid" onClick={handleCustomerPurchase}>Purchase Item</button>
+                  <div className="action-buttons" style={{ marginTop: '14px' }}>
                     <button className="btn-cancel" onClick={() => setSelectedItem(null)}>Close</button>
                   </div>
                 </div>
               ) : (
-                // WAREHOUSE & AUDIT VIEW ONLY
                 <div>
                   <p><strong>Brand:</strong> {selectedItem.brand}</p>
                   <p><strong>Category:</strong> {selectedItem.category}</p>
@@ -1178,6 +1566,168 @@ function App() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* SECOND VERIFICATION CONFIRMATION POPUP FOR RESTOCK */}
+        {selectedItem && showRestockConfirmModal && (
+          <div
+            className="modal-overlay"
+            onClick={() => !isSubmittingRestock && setShowRestockConfirmModal(false)}
+            style={{ zIndex: 1100, backgroundColor: 'rgba(0, 0, 0, 0.78)' }}
+          >
+            <div
+              className="modal-content"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '420px',
+                border: '1px solid rgba(129, 199, 132, 0.5)',
+                boxShadow: '0 14px 36px rgba(0, 0, 0, 0.65)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '22px' }}>🔔</span>
+                <h3 style={{ margin: 0, color: '#81c784' }}>Verify Warehouse Restock</h3>
+              </div>
+              <p style={{ color: '#d1d5db', fontSize: '14px', marginBottom: '14px' }}>
+                Please confirm the restock details below before dispatching this request to the warehouse:
+              </p>
+
+              <div
+                style={{
+                  backgroundColor: 'rgba(11, 15, 12, 0.85)',
+                  border: '1px solid rgba(129, 199, 132, 0.25)',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  fontSize: '14px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9ca3af' }}>Product:</span>
+                  <strong style={{ color: '#f3f4f6' }}>{selectedItem.name}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9ca3af' }}>Restock Quantity:</span>
+                  <strong style={{ color: '#81c784' }}>+{purchaseQty} unit(s)</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9ca3af' }}>Stock After Delivery:</span>
+                  <strong style={{ color: '#e5e7eb' }}>
+                    {selectedItem.quantity} → {Number(selectedItem.quantity) + Number(purchaseQty)}
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '8px' }}>
+                  <span style={{ color: '#9ca3af' }}>Total Restock Value:</span>
+                  <strong style={{ color: '#fbbf24' }}>
+                    ₱{(Number(purchaseQty) * Number(selectedItem.price)).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="action-buttons" style={{ justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn-cancel"
+                  disabled={isSubmittingRestock}
+                  onClick={() => setShowRestockConfirmModal(false)}
+                >
+                  Go Back
+                </button>
+                <button
+                  type="button"
+                  className="btn-save btn-emerald-solid"
+                  disabled={isSubmittingRestock}
+                  onClick={handleConfirmRestockRequest}
+                >
+                  {isSubmittingRestock ? 'Sending...' : 'Confirm & Send Request'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SECOND VERIFICATION CONFIRMATION POPUP FOR STAFF SALE */}
+        {selectedItem && showSaleConfirmModal && (
+          <div
+            className="modal-overlay"
+            onClick={() => !isSubmittingSale && setShowSaleConfirmModal(false)}
+            style={{ zIndex: 1100, backgroundColor: 'rgba(0, 0, 0, 0.78)' }}
+          >
+            <div
+              className="modal-content"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '420px',
+                border: '1px solid rgba(129, 199, 132, 0.5)',
+                boxShadow: '0 14px 36px rgba(0, 0, 0, 0.65)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '22px' }}>🔔</span>
+                <h3 style={{ margin: 0, color: '#81c784' }}>Verify Customer Sale</h3>
+              </div>
+              <p style={{ color: '#d1d5db', fontSize: '14px', marginBottom: '14px' }}>
+                Please confirm the sale details below before recording this transaction:
+              </p>
+
+              <div
+                style={{
+                  backgroundColor: 'rgba(11, 15, 12, 0.85)',
+                  border: '1px solid rgba(129, 199, 132, 0.25)',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  fontSize: '14px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9ca3af' }}>Product:</span>
+                  <strong style={{ color: '#f3f4f6' }}>{selectedItem.name}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9ca3af' }}>Quantity to Buy:</span>
+                  <strong style={{ color: '#81c784' }}>{purchaseQty} unit(s)</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9ca3af' }}>Remaining Stock:</span>
+                  <strong style={{ color: '#e5e7eb' }}>
+                    {selectedItem.quantity} → {Math.max(0, Number(selectedItem.quantity) - Number(purchaseQty))}
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '8px' }}>
+                  <span style={{ color: '#9ca3af' }}>Total Sale Amount:</span>
+                  <strong style={{ color: '#fbbf24' }}>
+                    ₱{(Number(purchaseQty) * Number(selectedItem.price)).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="action-buttons" style={{ justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn-cancel"
+                  disabled={isSubmittingSale}
+                  onClick={() => setShowSaleConfirmModal(false)}
+                >
+                  Go Back
+                </button>
+                <button
+                  type="button"
+                  className="btn-save btn-emerald-solid"
+                  disabled={isSubmittingSale}
+                  onClick={handleConfirmCustomerPurchase}
+                >
+                  {isSubmittingSale ? 'Processing...' : 'Confirm & Complete Sale'}
+                </button>
+              </div>
             </div>
           </div>
         )}
